@@ -19,3 +19,4 @@ export { addNews } from './season/news';
 export * from './model/war';
 export { developPlayer, retirementChance } from './progression';
 export * from './sim/norms';
+export * from './season/trades';

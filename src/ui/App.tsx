@@ -10,6 +10,7 @@ import { League } from './screens/League';
 import { NewCareer } from './screens/NewCareer';
 import { Offseason } from './screens/Offseason';
 import { Roster } from './screens/Roster';
+import { Trades } from './screens/Trades';
 import { Welcome } from './screens/Welcome';
 
 export function App() {
@@ -39,6 +40,7 @@ export function App() {
           <Route path="league" element={<League />} />
           <Route path="offseason" element={<Offseason />} />
           <Route path="free-agents" element={<FreeAgents />} />
+          <Route path="trades" element={<Trades />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

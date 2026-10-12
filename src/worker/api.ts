@@ -1,8 +1,8 @@
 import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
-  autoDraftPick, fixRoster, letPlayerGo, rosterIssues, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  autoDraftPick, executeTrade, fixRoster, letPlayerGo, rosterIssues, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
-  type SeasonState,
+  type SeasonState, type TradeProposal,
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
 import {
@@ -276,6 +276,13 @@ export function createEngineApi(db = new GameDB()) {
       if (!pick || pick.teamId !== state.userTeamId) return { ok: false, reason: "You're not on the clock." };
       if (!draftPlayer(state, playerId)) return { ok: false, reason: 'That player is not available.' };
       runDraft(state, false);
+      return commit();
+    },
+
+    async trade(proposal: TradeProposal): Promise<ActionResult> {
+      const { state } = current();
+      const res = executeTrade(state, proposal);
+      if (!res.ok) return res;
       return commit();
     },
 

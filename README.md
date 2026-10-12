@@ -24,7 +24,7 @@ src/
   engine/   Pure TypeScript game logic (no DOM). Runs in a Web Worker.
     generate/  league, team and player generation
     sim/       plate appearance model, lineups, single-game simulation
-    season/    schedule and day-by-day season simulation
+    season/    schedule, season sim, playoffs, offseason, contracts, trades, rosters
   worker/   Comlink API the UI calls into (engine.worker.ts / client.ts).
   db/       IndexedDB persistence via Dexie (one record set per save).
   state/    Zustand stores: loaded save, theme.
@@ -40,4 +40,5 @@ src/
 
 - **Phase 0 — Foundation:** done. App shell, league generation, save/load, roster, player sheets, standings, finances overview.
 - **Phase 1 — Core sim:** done. Plate-appearance game engine (log5 batter/pitcher matchups, platoon splits, baserunning, steals, double plays, errors, pitcher fatigue and bullpen management, W/L/S decisions), balanced 162-game schedule, season simulation in the worker, box scores with play-by-play, league scores, stat leaders and player season stats. A calibration test keeps league totals MLB-like (≈4.4 R/G, .245 AVG, 22–23% K, ≈4.3 ERA); a full season sims in well under a second.
-- **Next — Phase 2:** manual lineups and depth charts, playoffs, and the offseason loop (progression, retirements, free agency, draft).
+- **Phase 2 — Playable career:** done. Editable lineup, batting order, positions, rotation and bullpen roles (or let the AI manage); call-ups and options with automatic roster legality. Seeded playoffs (division series, conference series, Diamond Series). A full offseason: season review with WAR-based awards and history, owner review and job security, aging/development/retirements, re-signing, AI-driven free agency, a scouted amateur draft, and a new season. Trades with an AI that values players by age, upside, contract and whether it's contending or rebuilding, with live feedback. News inbox, career stats, budgets.
+- **Next — Phase 3:** scouting budgets and directors, arbitration/service time and extensions, 40-man roster and waivers, deeper minors, staff, trade finder and AI-initiated offers, advanced stats.

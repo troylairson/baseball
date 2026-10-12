@@ -254,6 +254,8 @@ src/
 
 ## 6. Roadmap
 
+> **Status:** Phases 0–2 are complete (see README). Phase 3 is next.
+
 ### Phase 0 — Foundation (week 1)
 - Vite + React + TS + Tailwind scaffold; lint/format/test setup; CI.
 - App shell: responsive nav (bottom tabs / sidebar), theming, routing.
