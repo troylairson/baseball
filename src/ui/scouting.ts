@@ -1,12 +1,17 @@
-import { overall, scoutRating, type Player, type ScoutedRating } from '../engine';
+import { overall, scoutingAccuracy, scoutRating, type Player, type ScoutedRating } from '../engine';
+import { useGame } from '../state/game';
 
 /**
- * How well the user's organization knows a player. Your own players are
- * well-known; everyone else is seen through the scouting department.
- * (Budgets and directors arrive with the scouting system in Phase 3.)
+ * How well the user's organization knows a player: own players well,
+ * everyone else through the scouting department (director + budget).
+ * Read from the store so every rating on screen uses the current department.
  */
 export function accuracyFor(player: Player, userTeamId: number): number {
-  return player.teamId === userTeamId ? 0.85 : 0.6;
+  const save = useGame.getState().save;
+  const team = save?.teams.find((t) => t.id === userTeamId);
+  if (!save || !team) return player.teamId === userTeamId ? 0.85 : 0.6;
+  const acc = scoutingAccuracy(save.league, team);
+  return player.teamId === userTeamId ? acc.own : acc.other;
 }
 
 export function scouted(player: Player, field: string, trueValue: number, userTeamId: number): ScoutedRating {

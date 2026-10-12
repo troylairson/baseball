@@ -19,7 +19,10 @@ export function PlayerCard({
     >
       <span className="w-8 shrink-0 text-center text-xs font-bold text-muted">{player.position}</span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{fullName(player)}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="truncate font-medium">{fullName(player)}</span>
+          {player.injury && <InjuryChip days={player.injury.days} />}
+        </span>
         <span className="block truncate text-xs text-muted tabular-nums">
           {statLine ?? `Age ${player.age} · ${player.bats}/${player.throws} · ${money(player.contract?.salary ?? 0)}`}
         </span>
@@ -34,5 +37,13 @@ export function PlayerCard({
         <RatingBadge value={pot} label="POT" />
       </span>
     </button>
+  );
+}
+
+export function InjuryChip({ days }: { days: number }) {
+  return (
+    <span className="shrink-0 rounded bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-danger" title={`Injured, about ${days} days`}>
+      IL {days}d
+    </span>
   );
 }

@@ -10,6 +10,7 @@ import { addNews } from './news';
 import { finalSeries } from './playoffs';
 import { fixRoster } from './roster';
 import { generateSchedule } from './schedule';
+import { staffCost, staffOffseason, staffRating } from './staff';
 import type { SeasonState } from './season';
 
 export const DRAFT_ROUNDS = 4;
@@ -84,7 +85,7 @@ function ownerReview(state: SeasonState): void {
       notes.push('won the title');
     }
   }
-  const over = payroll(players, team.id) - payrollBudget(team);
+  const over = payroll(players, team.id) + staffCost(league, team) - payrollBudget(team);
   if (over > 0) {
     const penalty = Math.min(15, (over / payrollBudget(team)) * 50);
     delta -= penalty;
@@ -174,7 +175,10 @@ function developAndRetire(state: SeasonState, rng: Rng): void {
   const { league, players } = state;
   for (const p of players) {
     if (p.retired || p.draftProspect) continue;
-    developPlayer(p, rng.fork(p.id));
+    const coaching = p.teamId === null
+      ? { hitting: 45, pitching: 45 }
+      : { hitting: staffRating(league, p.teamId, 'hitting'), pitching: staffRating(league, p.teamId, 'pitching') };
+    developPlayer(p, rng.fork(p.id), coaching);
   }
   for (const p of players) {
     if (p.retired || p.draftProspect) continue;
@@ -428,6 +432,7 @@ export function advanceOffseason(state: SeasonState): number[] {
   switch (league.offseason) {
     case 'review':
       developAndRetire(state, rng);
+      staffOffseason(league, state.teams, state.userTeamId, rng.fork('staff'));
       tickContracts(state, rng);
       league.offseason = 'resign';
       league.date = `${league.season}-11-10`;
@@ -525,6 +530,15 @@ export function startNewSeason(state: SeasonState, rng: Rng): number[] {
       p.demand = null;
     }
   }
+  for (const p of state.players) {
+    p.fatigue = 0;
+    // The offseason heals most injuries; only the longest carry over.
+    if (p.injury) {
+      p.injury.days -= 150;
+      if (p.injury.days <= 0) p.injury = null;
+    }
+  }
+
   for (const t of state.teams) {
     t.wins = 0;
     t.losses = 0;
@@ -543,8 +557,6 @@ export function startNewSeason(state: SeasonState, rng: Rng): number[] {
       });
     }
   }
-  for (const p of state.players) p.fatigue = 0;
-
   state.schedule = generateSchedule(state.teams, league.settings.gamesPerSeason, league.season, rng.fork('schedule'));
   state.stats = new Map();
   state.norms = undefined;

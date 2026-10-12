@@ -11,7 +11,7 @@ import { Inbox } from '../components/Inbox';
 import { fullName, money, shortName } from '../format';
 import { useOpenGame, useOpenPlayer } from '../hooks';
 import { scoutedOverall } from '../scouting';
-import { payroll, payrollBudget, teamOverall } from '../teams';
+import { payrollBudget, spending, teamOverall } from '../teams';
 
 export function Home() {
   const save = useSave();
@@ -21,7 +21,7 @@ export function Home() {
 
   const ovr = teamOverall(players, team.id);
   const rank = [...teams].sort((a, b) => teamOverall(players, b.id) - teamOverall(players, a.id)).findIndex((t) => t.id === team.id) + 1;
-  const pay = payroll(players, team.id);
+  const pay = spending(league, players, team);
   const budget = payrollBudget(team);
   const org = players.filter((p) => p.teamId === team.id);
   const topProspect = org
@@ -82,7 +82,7 @@ export function Home() {
             <Todo icon="pen" to="/play/office" title={`${expiring.length} contracts expire this season`} detail="Decide who to extend before free agency." />
           )}
           {pay > budget && (
-            <Todo icon="alert" to="/play/office" title="Payroll is over budget" detail={`${money(pay - budget)} over the owner's ${money(budget)} limit.`} />
+            <Todo icon="alert" to="/play/office" title="Spending is over budget" detail={`${money(pay - budget)} over the owner's ${money(budget)} limit.`} />
           )}
         </ul>
       </Card>

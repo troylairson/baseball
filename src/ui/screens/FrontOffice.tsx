@@ -5,14 +5,14 @@ import { Icon, type IconName } from '../components/Icon';
 import { fullName, money } from '../format';
 import { useOpenPlayer } from '../hooks';
 import { scoutedOverall } from '../scouting';
-import { payroll, payrollBudget } from '../teams';
+import { payroll, payrollBudget, spending } from '../teams';
+import { BudgetBar } from '../components/BudgetBar';
 
 const TOOLS: { icon: IconName; title: string; detail: string; to?: string }[] = [
   { icon: 'trade', title: 'Trades', detail: 'Build deals with clear value feedback', to: '/play/trades' },
   { icon: 'pen', title: 'Free Agents', detail: 'Sign available players', to: '/play/free-agents' },
   { icon: 'draft', title: 'Draft', detail: 'Held each offseason', to: '/play/offseason' },
-  { icon: 'search', title: 'Scouting', detail: 'Budgets, directors and assignments' },
-  { icon: 'staff', title: 'Staff', detail: 'Coaches who shape development' },
+  { icon: 'staff', title: 'Staff & Scouting', detail: 'Coaches, trainer and scouting budget', to: '/play/staff' },
 ];
 
 export function FrontOffice() {
@@ -20,8 +20,8 @@ export function FrontOffice() {
   const team = useUserTeam();
   const openPlayer = useOpenPlayer();
   const pay = payroll(players, team.id);
+  const spend = spending(league, players, team);
   const budget = payrollBudget(team);
-  const used = Math.min(100, (pay / budget) * 100);
   const contracts = players
     .filter((p) => p.teamId === team.id && p.level === 'MLB')
     .sort((a, b) => (b.contract?.salary ?? 0) - (a.contract?.salary ?? 0));
@@ -31,16 +31,11 @@ export function FrontOffice() {
       <PageHeader title="Front Office" subtitle="Run the business of baseball" />
       <div className="grid gap-4 md:grid-cols-2">
         <Card title="Finances">
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold tabular-nums">{money(pay)}</span>
-            <span className="text-sm text-muted">of {money(budget)} budget</span>
-          </div>
-          <div className="mt-3 h-2.5 rounded-full bg-surface-2">
-            <div className={`h-full rounded-full ${pay > budget ? 'bg-danger' : 'bg-accent'}`} style={{ width: `${used}%` }} />
-          </div>
-          <p className="mt-2 text-sm text-muted">
-            {pay > budget ? `${money(pay - budget)} over budget` : `${money(budget - pay)} available to spend`}
-          </p>
+          <BudgetBar used={spend} budget={budget} label="Total spending" />
+          <dl className="mt-3 space-y-1 text-sm">
+            <div className="flex justify-between"><dt className="text-muted">Player payroll</dt><dd className="tabular-nums">{money(pay)}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted">Staff & scouting</dt><dd className="tabular-nums">{money(spend - pay)}</dd></div>
+          </dl>
         </Card>
 
         <Card title="Tools">

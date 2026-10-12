@@ -11,7 +11,7 @@ import { TeamBadge } from '../components/TeamBadge';
 import { fullName, money, shortName } from '../format';
 import { useOpenPlayer } from '../hooks';
 import { scoutedOverall } from '../scouting';
-import { payroll, payrollBudget } from '../teams';
+import { payrollBudget, spending } from '../teams';
 
 const STAGES: { key: OffseasonStage | 'season'; label: string }[] = [
   { key: 'review', label: 'Review' },
@@ -213,7 +213,7 @@ export function FreeAgency() {
 
   return (
     <div className="grid gap-4">
-      <Card><BudgetBar used={payroll(save.players, team.id)} budget={payrollBudget(team)} /></Card>
+      <Card><BudgetBar used={spending(save.league, save.players, team)} budget={payrollBudget(team)} label="Total spending" /></Card>
       <Segmented
         label="Position filter"
         value={side}

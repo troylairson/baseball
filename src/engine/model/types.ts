@@ -76,6 +76,14 @@ export interface Player {
   draftProspect?: boolean;
   /** What a free agent (or expiring player) is asking for. */
   demand?: Contract | null;
+  /** Current injury; injured players can't play and sit on the injured list. */
+  injury?: Injury | null;
+}
+
+export interface Injury {
+  /** Days until healthy. */
+  days: number;
+  description: string;
 }
 
 export interface Team {
@@ -91,6 +99,8 @@ export interface Team {
   market: number;
   /** Owner's payroll budget in $K. */
   budget?: number;
+  /** Scouting spend: 0 low, 1 standard, 2 high. */
+  scoutingLevel?: number;
   wins: number;
   losses: number;
   runsScored: number;
@@ -239,4 +249,6 @@ export interface League {
   news?: NewsItem[];
   nextNewsId?: number;
   owner?: OwnerState;
+  /** All coaches/scouts, employed or available. */
+  staff?: import('../season/staff').StaffMember[];
 }

@@ -61,6 +61,8 @@ export function PlayerActions({ player }: { player: Player }) {
     );
   }
 
+  if (player.injury) return <Note>On the injured list. They'll rejoin the roster automatically when healthy.</Note>;
+
   return (
     <div className="flex gap-2">
       {player.level === 'MLB' ? (

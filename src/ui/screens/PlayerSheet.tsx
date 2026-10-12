@@ -52,6 +52,11 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
         </Summary>
       </div>
 
+      {player.injury && (
+        <p className="mt-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
+          Injured: {player.injury.description}, out about {player.injury.days} more day{player.injury.days === 1 ? '' : 's'}.
+        </p>
+      )}
       <div className="mt-4">
         <PlayerActions player={player} />
       </div>

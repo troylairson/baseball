@@ -7,7 +7,14 @@ import type { Rng } from './rng';
  * with a strong work ethic), players in their prime hold steady with some
  * noise, and veterans decline — speed first, then everything else.
  */
-export function developPlayer(p: Player, rng: Rng): void {
+export interface Coaching {
+  /** Hitting coach rating (20–80). */
+  hitting: number;
+  /** Pitching coach rating (20–80). */
+  pitching: number;
+}
+
+export function developPlayer(p: Player, rng: Rng, coaching: Coaching = { hitting: 50, pitching: 50 }): void {
   p.age++;
   const ethic = (p.personality.workEthic - 50) / 50; // -0.6 .. 0.6
   const age = p.age;
@@ -15,12 +22,15 @@ export function developPlayer(p: Player, rng: Rng): void {
   const growShare = age <= 21 ? 0.3 : age <= 24 ? 0.35 : age <= 27 ? 0.45 : 0;
   const decline = age >= 31 ? (age - 30) * 0.9 : 0;
 
+  // A good coach speeds growth and slows decline by up to about a fifth.
+  const coachMul = (rating: number) => 1 + (rating - 50) / 150;
+  let coach = coachMul(coaching.hitting);
   const step = (cur: number, pot: number, declineMul = 1) => {
     if (growShare > 0) {
-      const gain = Math.max(0, (pot - cur) * (growShare + ethic * 0.1) + rng.normal(0, 1.5));
+      const gain = Math.max(0, (pot - cur) * (growShare + ethic * 0.1) * coach + rng.normal(0, 1.5));
       return clampRating(cur + gain);
     }
-    return clampRating(cur - decline * declineMul + rng.normal(0, 1.4));
+    return clampRating(cur - (decline * declineMul) / coach + rng.normal(0, 1.4));
   };
 
   const b = p.batting;
@@ -32,6 +42,7 @@ export function developPlayer(p: Player, rng: Rng): void {
     speed: clampRating(b.speed - (age >= 28 ? 1 + (age - 28) * 0.3 : 0) + rng.normal(0, 1)),
   };
   if (p.pitching && p.pitchingPotential) {
+    coach = coachMul(coaching.pitching);
     const c = p.pitching;
     const pp = p.pitchingPotential;
     p.pitching = {

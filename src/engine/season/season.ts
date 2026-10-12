@@ -4,7 +4,10 @@ import { Rng } from '../rng';
 import { simGame, type GameResult, type TeamGameInput } from '../sim/game';
 import { resolvePlan, type GamePlan } from '../sim/lineup';
 import { computeNorms, type RatingNorms } from '../sim/norms';
+import { rollInjuries } from '../sim/injuries';
 import { addNews } from './news';
+import { fixRoster, rosterIssues } from './roster';
+import { staffRating } from './staff';
 import {
   activeSeries, advanceBracket, createPlayoffs, nextSeriesGame, recordSeriesGame, roundName,
 } from './playoffs';
@@ -46,8 +49,53 @@ export function nextGameFor(state: SeasonState, teamId: number): ScheduledGame |
   return state.schedule.find((g) => !g.played && (g.homeId === teamId || g.awayId === teamId));
 }
 
+/** Healthy major leaguers available to play today. */
 export function activeRoster(players: Player[], teamId: number): Player[] {
-  return players.filter((p) => p.teamId === teamId && p.level === 'MLB' && !p.retired);
+  return players.filter((p) => p.teamId === teamId && p.level === 'MLB' && !p.retired && !p.injury);
+}
+
+/** Head trainer quality (20–80) for a team; shortens injuries. */
+export function trainerRating(state: SeasonState, teamId: number): number {
+  return staffRating(state.league, teamId, 'trainer');
+}
+
+/** Fix any team whose active roster is illegal (e.g. after injuries); tell the user. */
+export function maintainRosters(state: SeasonState): void {
+  for (const team of state.teams) {
+    const org = state.players.filter((p) => p.teamId === team.id && !p.retired);
+    if (rosterIssues(org.filter((p) => p.level === 'MLB')).length === 0) continue;
+    const moves = fixRoster(org, team.id !== state.userTeamId);
+    if (team.id === state.userTeamId && moves.length) {
+      const byId = new Map(org.map((p) => [p.id, p]));
+      const describe = (to: 'MLB' | 'AAA') =>
+        moves.filter((m) => m.to === to).map((m) => { const p = byId.get(m.playerId)!; return `${p.firstName} ${p.lastName}`; }).join(', ');
+      const up = describe('MLB');
+      const down = describe('AAA');
+      addNews(state.league, {
+        kind: 'team',
+        title: 'Roster moves',
+        body: [up && `Called up ${up}.`, down && `Optioned ${down}.`].filter(Boolean).join(' '),
+        mine: true,
+      });
+    }
+  }
+}
+
+function applyInjuries(state: SeasonState, game: ScheduledGame, result: GameResult, players: Map<number, Player>): void {
+  const rng = new Rng(`${state.seed}-${state.league.season}-inj-${game.id}`);
+  for (const { playerId, injury } of rollInjuries(result, players, rng, (teamId) => trainerRating(state, teamId))) {
+    const p = players.get(playerId)!;
+    p.injury = injury;
+    if (p.teamId === state.userTeamId) {
+      addNews(state.league, {
+        kind: 'team',
+        title: `${p.firstName} ${p.lastName} to the injured list`,
+        body: `${injury.description[0]!.toUpperCase()}${injury.description.slice(1)} — expected out about ${injury.days} days.`,
+        playerId,
+        mine: true,
+      });
+    }
+  }
 }
 
 export function planFor(state: SeasonState, teamId: number): GamePlan {
@@ -149,9 +197,21 @@ function applyWorkload(state: SeasonState, result: GameResult, countStats: boole
   }
 }
 
-function recover(state: SeasonState): void {
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86400000);
+
+/** Rest and heal for the days that pass (off days included). */
+function recover(state: SeasonState, days: number): void {
   for (const p of state.players) {
-    if (p.fatigue > 0) p.fatigue = Math.max(0, p.fatigue - (p.position === 'SP' ? RECOVERY.SP : RECOVERY.RP));
+    if (p.fatigue > 0) p.fatigue = Math.max(0, p.fatigue - (p.position === 'SP' ? RECOVERY.SP : RECOVERY.RP) * days);
+    if (p.injury) {
+      p.injury.days -= days;
+      if (p.injury.days <= 0) {
+        if (p.teamId === state.userTeamId) {
+          addNews(state.league, { kind: 'team', title: `${p.firstName} ${p.lastName} is healthy`, body: `Back from ${p.injury.description}.`, playerId: p.id, mine: true });
+        }
+        p.injury = null;
+      }
+    }
   }
 }
 
@@ -166,6 +226,7 @@ function simPlayoffDay(state: SeasonState, teams: Map<number, Team>): PlayedGame
     state.schedule.push(game);
     const pg = playGame(state, game, teams);
     applyWorkload(state, pg.result, false, players);
+    applyInjuries(state, game, pg.result, players);
     const winner = game.homeScore! > game.awayScore! ? game.homeId : game.awayId;
     recordSeriesGame(series, winner);
     if (series.winnerId !== null) {
@@ -208,12 +269,14 @@ export function simDay(state: SeasonState): PlayedGame[] {
 
   if (league.phase === 'playoffs') {
     if (playoffsOver(state)) return [];
+    maintainRosters(state);
     const played = simPlayoffDay(state, teams);
-    recover(state);
+    recover(state, 1);
     league.date = addDays(league.date, 1);
     return played;
   }
   if (league.phase !== 'regular') return [];
+  maintainRosters(state);
 
   const today = state.schedule.filter((g) => g.date === league.date && !g.played);
   const players = new Map(state.players.map((p) => [p.id, p]));
@@ -231,12 +294,14 @@ export function simDay(state: SeasonState): PlayedGame[] {
     away.runsScored += result.away.runs;
     away.runsAllowed += result.home.runs;
     applyWorkload(state, result, true, players);
+    applyInjuries(state, game, result, players);
     played.push(pg);
   }
 
-  recover(state);
   const next = state.schedule.find((g) => !g.played);
-  league.date = next ? (next.date > league.date ? next.date : addDays(league.date, 1)) : addDays(league.date, 1);
+  const nextDate = next ? (next.date > league.date ? next.date : addDays(league.date, 1)) : addDays(league.date, 1);
+  recover(state, Math.max(1, daysBetween(league.date, nextDate)));
+  league.date = nextDate;
   return played;
 }
 

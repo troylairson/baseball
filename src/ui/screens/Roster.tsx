@@ -27,7 +27,8 @@ export function Roster() {
   const [view, setView] = useState<View>('lineup');
 
   const org = players.filter((p) => p.teamId === team.id && !p.retired);
-  const mlb = org.filter((p) => p.level === 'MLB');
+  const mlb = org.filter((p) => p.level === 'MLB' && !p.injury);
+  const injured = org.filter((p) => p.injury);
   const issues = rosterIssues(mlb);
 
   const list = (title: string, items: Player[]) => (
@@ -40,7 +41,10 @@ export function Roster() {
 
   return (
     <>
-      <PageHeader title="Roster" subtitle={`${mlb.length}/26 active · ${money(payroll(players, team.id))} payroll`} />
+      <PageHeader
+        title="Roster"
+        subtitle={`${mlb.length}/26 active${injured.length ? ` · ${injured.length} injured` : ''} · ${money(payroll(players, team.id))} payroll`}
+      />
       {issues.length > 0 && (
         <div className="mb-4 rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm">
           {issues.map((i) => <p key={i.kind}>{i.message}</p>)}
@@ -56,12 +60,13 @@ export function Roster() {
         <div className="flex flex-col gap-4">
           {list('Position players', mlb.filter((p) => !isPitcher(p)).sort(byPosition))}
           {list('Pitchers', mlb.filter(isPitcher).sort(byPosition))}
+          {injured.length > 0 && list('Injured list', injured.sort((a, b) => b.injury!.days - a.injury!.days))}
         </div>
       )}
       {view === 'aaa' && (
         <div className="flex flex-col gap-4">
-          {list('Hitters', org.filter((p) => p.level === 'AAA' && !isPitcher(p)).sort(byPosition))}
-          {list('Pitchers', org.filter((p) => p.level === 'AAA' && isPitcher(p)).sort(byPosition))}
+          {list('Hitters', org.filter((p) => p.level === 'AAA' && !p.injury && !isPitcher(p)).sort(byPosition))}
+          {list('Pitchers', org.filter((p) => p.level === 'AAA' && !p.injury && isPitcher(p)).sort(byPosition))}
         </div>
       )}
     </>

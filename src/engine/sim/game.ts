@@ -86,7 +86,7 @@ const DIRECTIONS = ['left', 'left-center', 'center', 'right-center', 'right'];
 
 export function pitchLimit(p: Player, starter: boolean): number {
   const stamina = p.pitching?.stamina ?? 30;
-  return starter ? 45 + stamina * 0.75 : 10 + stamina * 0.6;
+  return starter ? 38 + stamina * 0.75 : 10 + stamina * 0.6;
 }
 
 export const RELIEVER_TIRED = 40;

@@ -1,5 +1,10 @@
-import { overall, type Player, type Team } from '../engine';
+import { overall, payroll, staffCost, type League, type Player, type Team } from '../engine';
 export { payroll, payrollBudget } from '../engine';
+
+/** Everything that counts against the owner's budget: payroll + staff + scouting. */
+export function spending(league: League, players: Player[], team: Team): number {
+  return payroll(players, team.id) + staffCost(league, team);
+}
 
 export function mlbRoster(players: Player[], teamId: number): Player[] {
   return players.filter((p) => p.teamId === teamId && p.level === 'MLB' && !p.retired);

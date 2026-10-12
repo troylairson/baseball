@@ -1,6 +1,6 @@
 import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
-  autoDraftPick, executeTrade, fixRoster, letPlayerGo, rosterIssues, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  autoDraftPick, executeTrade, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
   type SeasonState, type TradeProposal,
 } from '../engine';
@@ -167,21 +167,6 @@ export function createEngineApi(db = new GameDB()) {
         return seasonOver(state) && startPhase === 'regular' && mode !== 'next';
       };
 
-      // Rosters must be legal before games: fill holes left by moves or injuries.
-      for (const team of state.teams) {
-        const org = state.players.filter((p) => p.teamId === team.id && !p.retired);
-        if (rosterIssues(org.filter((p) => p.level === 'MLB')).length === 0) continue;
-        const moves = fixRoster(org);
-        if (team.id === userId && moves.length) {
-          addNews(state.league, {
-            kind: 'team',
-            title: 'Roster filled automatically',
-            body: `${moves.length} move(s) were made so the active roster is legal.`,
-            mine: true,
-          });
-        }
-      }
-
       const played: PlayedGame[] = [];
       let days = 0;
       while (!done() && !cancelRequested) {
@@ -236,7 +221,7 @@ export function createEngineApi(db = new GameDB()) {
       const p = state.players.find((x) => x.id === playerId);
       if (!p || p.teamId !== state.userTeamId) return { ok: false, reason: 'That player is not in your organization.' };
       if (p.level === level) return { ok: false, reason: `Already in ${level}.` };
-      const active = state.players.filter((x) => x.teamId === state.userTeamId && x.level === 'MLB' && !x.retired).length;
+      const active = state.players.filter((x) => x.teamId === state.userTeamId && x.level === 'MLB' && !x.retired && !x.injury).length;
       if (level === 'MLB' && active >= ACTIVE_ROSTER_SIZE) {
         return { ok: false, reason: `The active roster is full (${ACTIVE_ROSTER_SIZE}). Send someone down first.` };
       }
@@ -276,6 +261,20 @@ export function createEngineApi(db = new GameDB()) {
       if (!pick || pick.teamId !== state.userTeamId) return { ok: false, reason: "You're not on the clock." };
       if (!draftPlayer(state, playerId)) return { ok: false, reason: 'That player is not available.' };
       runDraft(state, false);
+      return commit();
+    },
+
+    async hireStaff(staffId: number): Promise<ActionResult> {
+      const { state } = current();
+      const res = hireStaff(state.league, state.userTeamId, staffId);
+      if (!res.ok) return res;
+      const hire = state.league.staff!.find((s) => s.id === staffId)!;
+      addNews(state.league, { kind: 'transaction', title: `Hired ${hire.name}`, body: `New ${ROLE_LABEL[hire.role].toLowerCase()} (rated ${hire.rating}).`, mine: true });
+      return commit();
+    },
+
+    async setScoutingLevel(level: number): Promise<ActionResult> {
+      user().scoutingLevel = Math.max(0, Math.min(2, Math.round(level)));
       return commit();
     },
 

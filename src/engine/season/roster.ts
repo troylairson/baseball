@@ -13,7 +13,11 @@ export interface RosterIssue {
   message: string;
 }
 
-export function rosterIssues(active: Player[]): RosterIssue[] {
+const healthy = (p: Player) => !p.injury;
+
+/** Problems with an active (MLB) roster. Injured players are on the IL and don't count. */
+export function rosterIssues(mlb: Player[]): RosterIssue[] {
+  const active = mlb.filter(healthy);
   const issues: RosterIssue[] = [];
   if (active.length !== ACTIVE_ROSTER_SIZE) {
     issues.push({ kind: 'count', message: `Active roster has ${active.length} players (needs ${ACTIVE_ROSTER_SIZE}).` });
@@ -37,8 +41,9 @@ export interface RosterMove {
  */
 export function fixRoster(org: Player[], upgrade = false): RosterMove[] {
   const moves: RosterMove[] = [];
-  const active = () => org.filter((p) => p.level === 'MLB');
-  const minors = () => org.filter((p) => p.level === 'AAA');
+  // Injured players stay where they are (MLB injured = on the IL).
+  const active = () => org.filter((p) => p.level === 'MLB' && healthy(p));
+  const minors = () => org.filter((p) => p.level === 'AAA' && healthy(p));
   const move = (p: Player, to: 'MLB' | 'AAA') => {
     p.level = to;
     moves.push({ playerId: p.id, to });
