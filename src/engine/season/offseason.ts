@@ -5,7 +5,9 @@ import type { Award, DraftPick, Player, Position, SeasonRecord, Team } from '../
 import { battingWar, leagueContext, pitchingWar } from '../model/war';
 import { developPlayer, retirementChance } from '../progression';
 import { hashString, Rng } from '../rng';
-import { contractDemand, MIN_SALARY } from './contracts';
+import {
+  arbitrationAward, contractDemand, contractStatus, EXTENSION_THRESHOLD, extensionTerms, extensionWillingness, MIN_SALARY, preArbRenewal,
+} from './contracts';
 import { addNews } from './news';
 import { finalSeries } from './playoffs';
 import { fixRoster } from './roster';
@@ -208,21 +210,30 @@ function tickContracts(state: SeasonState, rng: Rng): void {
     if (p.retired || p.teamId === null || !p.contract) continue;
     p.contract.years--;
     if (p.contract.years > 0) continue;
-    p.demand = contractDemand(p);
-    if (p.teamId === state.userTeamId) continue;
-    // AI: keep useful players; minor leaguers are kept cheaply if they're prospects.
+    const status = contractStatus(p);
+    const mine = p.teamId === state.userTeamId;
+    // Minor leaguers: prospects are kept on cheap deals, others released.
+    if (p.level === 'AAA' && status !== 'free-agent') {
+      if (p.age <= 26 || overall(p, true) >= 50 || mine) p.contract = preArbRenewal(p);
+      else releaseToFreeAgency(p);
+      continue;
+    }
+    if (status === 'pre-arb') {
+      // Team control: renewed automatically.
+      p.contract = preArbRenewal(p);
+      continue;
+    }
+    p.expiring = status;
+    p.demand = status === 'arbitration' ? arbitrationAward(p) : contractDemand(p);
+    if (mine) continue;
     const ovr = overall(p);
-    const pot = overall(p, true);
-    if (p.level === 'AAA') {
-      if (p.age <= 26 || pot >= 50) {
-        p.contract = { salary: MIN_SALARY, years: 2 };
-        p.demand = null;
-      } else {
-        releaseToFreeAgency(p);
-      }
-    } else if (ovr >= 48 && p.age <= 33 && rng.chance(0.6)) {
+    const keep = status === 'arbitration'
+      ? ovr >= 46 || overall(p, true) >= 55
+      : ovr >= 48 && p.age <= 33 && rng.chance(0.6);
+    if (keep) {
       p.contract = p.demand;
       p.demand = null;
+      p.expiring = null;
     } else {
       releaseToFreeAgency(p);
     }
@@ -233,6 +244,7 @@ function releaseToFreeAgency(p: Player): void {
   p.teamId = null;
   p.level = 'MLB';
   p.contract = null;
+  p.expiring = null;
   p.demand = contractDemand(p);
 }
 
@@ -244,11 +256,13 @@ export function expiringFor(state: SeasonState, teamId: number): Player[] {
 export function resignPlayer(state: SeasonState, playerId: number): boolean {
   const p = state.players.find((x) => x.id === playerId);
   if (!p || p.contract?.years !== 0 || !p.demand) return false;
+  const tender = p.expiring === 'arbitration';
   p.contract = { ...p.demand };
   p.demand = null;
+  p.expiring = null;
   addNews(state.league, {
     kind: 'transaction',
-    title: `Re-signed ${fullName(p)}`,
+    title: tender ? `Tendered ${fullName(p)} a contract` : `Re-signed ${fullName(p)}`,
     body: `${p.contract.years} year${p.contract.years > 1 ? 's' : ''} at $${(p.contract.salary / 1000).toFixed(1)}M per season.`,
     playerId,
     mine: true,
@@ -569,4 +583,29 @@ export function startNewSeason(state: SeasonState, rng: Rng): number[] {
     mine: true,
   });
   return removed;
+}
+
+export type ExtendResult = { ok: true } | { ok: false; reason: string };
+
+/** Offer the user's player an extension at his asking terms. */
+export function extendPlayer(state: SeasonState, playerId: number): ExtendResult {
+  const p = state.players.find((x) => x.id === playerId);
+  if (!p || p.teamId !== state.userTeamId || !p.contract) return { ok: false, reason: 'Not your player.' };
+  if (p.contract.years !== 1) return { ok: false, reason: 'Extensions are offered in the final year of a contract.' };
+  const team = state.teams.find((t) => t.id === state.userTeamId)!;
+  const games = team.wins + team.losses;
+  const winPct = games ? team.wins / games : 0.5;
+  if (extensionWillingness(p, winPct) < EXTENSION_THRESHOLD) {
+    return { ok: false, reason: `${fullName(p)} wants to test free agency.` };
+  }
+  const terms = extensionTerms(p);
+  p.contract = { salary: terms.salary, years: terms.years + 1 };
+  addNews(state.league, {
+    kind: 'transaction',
+    title: `Extended ${fullName(p)}`,
+    body: `${terms.years} more year${terms.years > 1 ? 's' : ''} at $${(terms.salary / 1000).toFixed(1)}M per season.`,
+    playerId,
+    mine: true,
+  });
+  return { ok: true };
 }

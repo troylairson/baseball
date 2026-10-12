@@ -12,10 +12,12 @@ export interface RatingNorms {
   stuff: number;
   control: number;
   movement: number;
+  /** Average defense of regulars at their primary positions. */
+  defense: number;
 }
 
 /** Averages of a freshly generated league, which the PA model is calibrated against. */
-export const BASE_NORMS: RatingNorms = { contact: 50.4, power: 49, eye: 50.4, stuff: 50.9, control: 50.2, movement: 50.4 };
+export const BASE_NORMS: RatingNorms = { contact: 50.4, power: 49, eye: 50.4, stuff: 50.9, control: 50.2, movement: 50.4, defense: 50.8 };
 
 export function computeNorms(players: Player[]): RatingNorms {
   const active = players.filter((p) => p.teamId !== null && p.level === 'MLB' && !p.retired);
@@ -30,5 +32,6 @@ export function computeNorms(players: Player[]): RatingNorms {
     stuff: mean(pitchers, (p) => p.pitching!.stuff, BASE_NORMS.stuff),
     control: mean(pitchers, (p) => p.pitching!.control, BASE_NORMS.control),
     movement: mean(pitchers, (p) => p.pitching!.movement, BASE_NORMS.movement),
+    defense: mean(hitters.filter((p) => p.position !== 'DH'), (p) => p.fielding.defense, BASE_NORMS.defense),
   };
 }

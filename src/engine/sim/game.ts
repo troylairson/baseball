@@ -114,6 +114,7 @@ export function simGame(
     contact: norms.contact - BASE_NORMS.contact, power: norms.power - BASE_NORMS.power, eye: norms.eye - BASE_NORMS.eye,
     stuff: norms.stuff - BASE_NORMS.stuff, control: norms.control - BASE_NORMS.control, movement: norms.movement - BASE_NORMS.movement,
   };
+  const defenseShift = (norms.defense ?? BASE_NORMS.defense) - BASE_NORMS.defense;
   const batCache = new Map<number, BattingRatings>();
   const batRatings = (p: Player): BattingRatings => {
     let r = batCache.get(p.id);
@@ -321,7 +322,7 @@ export function simGame(
         bat.batterIdx = (bat.batterIdx + 1) % bat.order.length;
         const batter = bat.players.get(slot.playerId)!;
         const result: PaResult = resolvePa(
-          { bat: batRatings(batter), bats: batter.bats, pitch: effective(field, app), throws: pitcher.throws, defense: field.defense },
+          { bat: batRatings(batter), bats: batter.bats, pitch: effective(field, app), throws: pitcher.throws, defense: field.defense - defenseShift },
           rng,
         );
         const b = slot.line;

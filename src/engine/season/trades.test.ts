@@ -4,7 +4,8 @@ import { overall } from '../model/ratings';
 import type { Player } from '../model/types';
 import { playerValue } from './contracts';
 import { rosterIssues } from './roster';
-import { evaluateTrade, executeTrade } from './trades';
+import { Rng } from '../rng';
+import { acceptOffer, evaluateTrade, executeTrade, maybeMakeOffer, shopPlayer, suggestPackage } from './trades';
 
 function ctx(seed: number) {
   const { league, teams, players } = generateLeague(seed);
@@ -60,5 +61,36 @@ describe('trades', () => {
     const ev = evaluateTrade(c, { partnerId: 1, give: [best(mlb(c.players, 0)).id], get: [worst(mlb(c.players, 1)).id] });
     expect(ev.accepted).toBe(false);
     expect(ev.message).toMatch(/deadline/);
+  });
+});
+
+describe('trade finder and offers', () => {
+  it('suggests a package the partner accepts', () => {
+    const c = ctx(6);
+    const target = [...mlb(c.players, 1)].sort((a, b) => overall(b) - overall(a))[2]!;
+    const pkg = suggestPackage(c, 1, [target.id]);
+    expect(pkg).not.toBeNull();
+    expect(evaluateTrade(c, { partnerId: 1, give: pkg!, get: [target.id] }).accepted).toBe(true);
+  });
+
+  it('shops a player to teams that would take him', () => {
+    const c = ctx(7);
+    const mine = best(mlb(c.players, 0));
+    const offers = shopPlayer(c, mine.id);
+    expect(offers.length).toBeGreaterThan(0);
+    for (const o of offers) expect(evaluateTrade(c, { partnerId: o.partnerId, give: [mine.id], get: o.get }).accepted).toBe(true);
+  });
+
+  it('AI teams make offers during the season that can be accepted', () => {
+    const c = ctx(8);
+    c.league.phase = 'regular';
+    c.league.date = `${c.league.season}-05-01`;
+    let offer = null;
+    for (let i = 0; i < 200 && !offer; i++) offer = maybeMakeOffer(c, new Rng(i));
+    expect(offer).not.toBeNull();
+    expect(c.league.offers).toHaveLength(1);
+    expect(acceptOffer(c, offer!.id).ok).toBe(true);
+    expect(c.players.find((p) => p.id === offer!.get[0])!.teamId).toBe(0);
+    expect(c.league.offers).toHaveLength(0);
   });
 });

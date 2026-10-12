@@ -59,3 +59,51 @@ export function leagueContext(lines: { bat: BattingLine; pit: PitchingLine }[]):
   }
   return { woba: den ? num / den : 0.315, ra9: outs ? (runs * 27) / outs : 4.4 };
 }
+
+/** League-wide rates used for park/era-neutral "plus" stats. */
+export interface LeagueRates extends LeagueContext {
+  obp: number;
+  slg: number;
+  era: number;
+  /** Added to raw FIP so league FIP equals league ERA. */
+  fipConstant: number;
+}
+
+export function leagueRates(lines: { bat: BattingLine; pit: PitchingLine }[]): LeagueRates {
+  const ctx = leagueContext(lines);
+  let h = 0, bb = 0, hbp = 0, ab = 0, sf = 0, tb = 0, er = 0, outs = 0, hr = 0, pbb = 0, phbp = 0, so = 0;
+  for (const { bat, pit } of lines) {
+    h += bat.h; bb += bat.bb; hbp += bat.hbp; ab += bat.ab; sf += bat.sf;
+    tb += singles(bat) + 2 * bat.d + 3 * bat.t + 4 * bat.hr;
+    er += pit.er; outs += pit.outs; hr += pit.hr; pbb += pit.bb; phbp += pit.hbp; so += pit.so;
+  }
+  const ip = outs / 3;
+  const era = ip ? (er * 9) / ip : 4.2;
+  const rawFip = ip ? (13 * hr + 3 * (pbb + phbp) - 2 * so) / ip : 0;
+  return {
+    ...ctx,
+    obp: ab + bb + hbp + sf ? (h + bb + hbp) / (ab + bb + hbp + sf) : 0.315,
+    slg: ab ? tb / ab : 0.4,
+    era,
+    fipConstant: era - rawFip,
+  };
+}
+
+export function opsPlus(b: BattingLine, lg: LeagueRates): number {
+  const denom = b.ab + b.bb + b.hbp + b.sf;
+  if (!denom || !b.ab) return 0;
+  const obp = (b.h + b.bb + b.hbp) / denom;
+  const slg = (singles(b) + 2 * b.d + 3 * b.t + 4 * b.hr) / b.ab;
+  return Math.round(100 * (obp / lg.obp + slg / lg.slg - 1));
+}
+
+export function fip(p: PitchingLine, lg: LeagueRates): number {
+  if (!p.outs) return 0;
+  return (13 * p.hr + 3 * (p.bb + p.hbp) - 2 * p.so) / (p.outs / 3) + lg.fipConstant;
+}
+
+export function eraPlus(p: PitchingLine, lg: LeagueRates): number {
+  if (!p.outs) return 0;
+  const era = (p.er * 27) / p.outs;
+  return era > 0 ? Math.round((100 * lg.era) / era) : 999;
+}

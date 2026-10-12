@@ -1,7 +1,7 @@
 import type { Player, PlayerSeasonStats, Team } from '../../engine';
 import { shortName } from '../format';
 import { useOpenPlayer } from '../hooks';
-import { leaders, type Leader } from '../stats';
+import { leaders, useLeagueRates, type Leader } from '../stats';
 import { Card } from './Card';
 import { TeamBadge } from './TeamBadge';
 
@@ -9,7 +9,9 @@ export function LeaderBoard({
   leader, stats, players, teams, teamGames,
 }: { leader: Leader; stats: PlayerSeasonStats[]; players: Map<number, Player>; teams: Map<number, Team>; teamGames: number }) {
   const openPlayer = useOpenPlayer();
-  const top = leaders(stats, leader, teamGames);
+  const lg = useLeagueRates();
+  const ctxFor = (s: PlayerSeasonStats) => ({ lg, player: players.get(s.playerId) });
+  const top = leaders(stats, leader, teamGames, ctxFor);
   return (
     <Card title={leader.label}>
       {top.length === 0 ? (
@@ -25,7 +27,7 @@ export function LeaderBoard({
                   <span className="w-4 text-right text-xs text-muted tabular-nums">{i + 1}</span>
                   {t && <TeamBadge team={t} size="sm" />}
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{p ? shortName(p) : '—'}</span>
-                  <span className="text-sm font-semibold tabular-nums">{leader.format(s)}</span>
+                  <span className="text-sm font-semibold tabular-nums">{leader.format(s, ctxFor(s))}</span>
                 </button>
               </li>
             );

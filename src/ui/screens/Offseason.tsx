@@ -146,7 +146,10 @@ function PlayerRow({ p, userTeamId, right, onOpen }: { p: Player; userTeamId: nu
         <span className="w-7 shrink-0 text-center text-xs font-bold text-muted">{p.position}</span>
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{fullName(p)}</span>
-          <span className="block truncate text-xs text-muted">Age {p.age}{p.demand ? ` · asks ${money(p.demand.salary)} × ${p.demand.years}` : ''}</span>
+          <span className="block truncate text-xs text-muted">
+            Age {p.age}
+            {p.expiring === 'arbitration' && p.demand ? ` · arbitration ${money(p.demand.salary)}` : p.demand ? ` · asks ${money(p.demand.salary)} × ${p.demand.years}` : ''}
+          </span>
         </span>
         <RatingBadge value={ovr} size="sm" />
         <RatingBadge value={pot} size="sm" />
@@ -169,7 +172,7 @@ function Resign() {
       <Card><BudgetBar used={committed} budget={payrollBudget(team)} label="Next season's commitments" /></Card>
       <Card title={`Expiring contracts (${expiring.length})`} className="px-2 sm:px-4">
         {expiring.length === 0 ? (
-          <p className="px-2 text-sm text-muted">Nobody to re-sign. Players you don't re-sign become free agents.</p>
+          <p className="px-2 text-sm text-muted">Nobody to decide on. Young players under team control were renewed automatically.</p>
         ) : (
           <ul>
             {expiring.map((p) => (
@@ -180,7 +183,9 @@ function Resign() {
                 onOpen={openPlayer}
                 right={
                   <span className="flex shrink-0 gap-1">
-                    <button onClick={() => void act(() => api().resign(p.id))} className="h-9 rounded-lg bg-accent px-3 text-xs font-semibold text-accent-contrast">Re-sign</button>
+                    <button onClick={() => void act(() => api().resign(p.id))} className="h-9 rounded-lg bg-accent px-3 text-xs font-semibold text-accent-contrast">
+                      {p.expiring === 'arbitration' ? 'Tender' : 'Re-sign'}
+                    </button>
                     <button onClick={() => void act(() => api().letGo(p.id))} className="h-9 rounded-lg border border-line px-3 text-xs font-semibold" aria-label={`Let ${fullName(p)} go`}>
                       <Icon name="close" className="size-4" />
                     </button>
@@ -191,7 +196,10 @@ function Resign() {
           </ul>
         )}
       </Card>
-      <p className="text-sm text-muted">Anyone left undecided hits free agency when you continue.</p>
+      <p className="text-sm text-muted">
+        Players with 3–5 years of service go to arbitration (one-year deals, cheaper than the market); 6+ years can walk as free agents.
+        Anyone left undecided hits free agency when you continue.
+      </p>
     </div>
   );
 }

@@ -1,4 +1,7 @@
-import { avg, era, ipString, isPitcher, obp, ops, rate3, slg, whip, type Player, type PlayerSeasonStats } from '../../engine';
+import {
+  avg, era, eraPlus, fip, ipString, isPitcher, obp, ops, opsPlus, per9, rate3, slg, whip, woba, type Player, type PlayerSeasonStats,
+} from '../../engine';
+import { useLeagueRates, warFor } from '../stats';
 import { useEffect, useState } from 'react';
 import { useGame } from '../../state/game';
 import { engine } from '../../worker/client';
@@ -102,19 +105,23 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
 }
 
 function SeasonStats({ player, stats, season }: { player: Player; stats: PlayerSeasonStats | undefined; season: number }) {
+  const lg = useLeagueRates();
   if (!stats) return null;
+  const war = warFor(player, stats, lg).toFixed(1);
   const cells: [string, string | number][] = isPitcher(player)
     ? stats.pit.g === 0
       ? []
       : [
           ['W-L', `${stats.pit.w}-${stats.pit.l}`], ['ERA', era(stats.pit).toFixed(2)], ['G', stats.pit.g], ['SV', stats.pit.sv],
           ['IP', ipString(stats.pit.outs)], ['SO', stats.pit.so], ['BB', stats.pit.bb], ['WHIP', whip(stats.pit).toFixed(2)],
+          ['ERA+', eraPlus(stats.pit, lg)], ['FIP', fip(stats.pit, lg).toFixed(2)], ['K/9', per9(stats.pit.so, stats.pit).toFixed(1)], ['WAR', war],
         ]
     : stats.bat.pa === 0
       ? []
       : [
           ['AVG', rate3(avg(stats.bat))], ['OBP', rate3(obp(stats.bat))], ['SLG', rate3(slg(stats.bat))], ['OPS', rate3(ops(stats.bat))],
           ['HR', stats.bat.hr], ['RBI', stats.bat.rbi], ['R', stats.bat.r], ['SB', stats.bat.sb],
+          ['OPS+', opsPlus(stats.bat, lg)], ['wOBA', rate3(woba(stats.bat))], ['BB%', `${((stats.bat.bb / stats.bat.pa) * 100).toFixed(1)}`], ['WAR', war],
         ];
   if (cells.length === 0) return null;
   return (

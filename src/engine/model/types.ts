@@ -76,6 +76,8 @@ export interface Player {
   draftProspect?: boolean;
   /** What a free agent (or expiring player) is asking for. */
   demand?: Contract | null;
+  /** Set while the player's contract is up: how his next deal is decided. */
+  expiring?: 'arbitration' | 'free-agent' | null;
   /** Current injury; injured players can't play and sit on the injured list. */
   injury?: Injury | null;
 }
@@ -221,6 +223,17 @@ export interface OwnerState {
 
 export type OffseasonStage = 'review' | 'resign' | 'freeAgency' | 'draft';
 
+export interface TradeOffer {
+  id: number;
+  partnerId: number;
+  /** User's players the AI wants. */
+  give: number[];
+  /** Players the AI offers. */
+  get: number[];
+  /** Offer lapses after this date. */
+  expires: string;
+}
+
 export interface DraftPick {
   overall: number;
   round: number;
@@ -249,6 +262,9 @@ export interface League {
   news?: NewsItem[];
   nextNewsId?: number;
   owner?: OwnerState;
+  /** Trade offers AI teams have made to the user. */
+  offers?: TradeOffer[];
+  nextOfferId?: number;
   /** All coaches/scouts, employed or available. */
   staff?: import('../season/staff').StaffMember[];
 }

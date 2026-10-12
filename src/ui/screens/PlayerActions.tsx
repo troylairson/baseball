@@ -1,4 +1,4 @@
-import { contractDemand, overall, type Player } from '../../engine';
+import { contractDemand, extensionTerms, overall, type Player } from '../../engine';
 import { api, useGame } from '../../state/game';
 import { money } from '../format';
 import { payroll, payrollBudget } from '../teams';
@@ -50,12 +50,17 @@ export function PlayerActions({ player }: { player: Player }) {
 
   if (league.offseason === 'resign' && player.contract?.years === 0) {
     const demand = player.demand ?? contractDemand(player);
+    const arb = player.expiring === 'arbitration';
     return (
       <div>
-        <p className="mb-2 text-sm text-muted">Contract expired. Asking {money(demand.salary)} × {demand.years} yr{demand.years > 1 ? 's' : ''}.</p>
+        <p className="mb-2 text-sm text-muted">
+          {arb
+            ? `Arbitration eligible: awarded ${money(demand.salary)} for one year if tendered.`
+            : `Free agent eligible. Asking ${money(demand.salary)} × ${demand.years} yr${demand.years > 1 ? 's' : ''}.`}
+        </p>
         <div className="flex gap-2">
-          <button className={primary} onClick={() => void act(() => api().resign(player.id))}>Re-sign</button>
-          <button className={secondary} onClick={() => void act(() => api().letGo(player.id))}>Let go</button>
+          <button className={primary} onClick={() => void act(() => api().resign(player.id))}>{arb ? 'Tender' : 'Re-sign'}</button>
+          <button className={secondary} onClick={() => void act(() => api().letGo(player.id))}>{arb ? 'Non-tender' : 'Let go'}</button>
         </div>
       </div>
     );
@@ -63,8 +68,16 @@ export function PlayerActions({ player }: { player: Player }) {
 
   if (player.injury) return <Note>On the injured list. They'll rejoin the roster automatically when healthy.</Note>;
 
+  const terms = extensionTerms(player);
+  const canExtend = player.contract?.years === 1 && league.phase !== 'offseason';
+
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
+      {canExtend && (
+        <button className={`${primary} min-w-full`} onClick={() => void act(() => api().extend(player.id))}>
+          Offer extension: {money(terms.salary)} × {terms.years} yrs
+        </button>
+      )}
       {player.level === 'MLB' ? (
         <button className={secondary} onClick={() => void act(() => api().setLevel(player.id, 'AAA'))}>Send to AAA</button>
       ) : (

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { contractStatus } from '../../engine';
 import { useSave, useUserTeam } from '../../state/game';
 import { Card, PageHeader, SoonBadge } from '../components/Card';
 import { Icon, type IconName } from '../components/Icon';
@@ -7,6 +8,8 @@ import { useOpenPlayer } from '../hooks';
 import { scoutedOverall } from '../scouting';
 import { payroll, payrollBudget, spending } from '../teams';
 import { BudgetBar } from '../components/BudgetBar';
+
+const STATUS_LABEL = { 'pre-arb': 'Pre-arb', arbitration: 'Arb', 'free-agent': 'FA' } as const;
 
 const TOOLS: { icon: IconName; title: string; detail: string; to?: string }[] = [
   { icon: 'trade', title: 'Trades', detail: 'Build deals with clear value feedback', to: '/play/trades' },
@@ -77,6 +80,7 @@ export function FrontOffice() {
                   <th className="pb-2 text-right font-medium">Age</th>
                   <th className="pb-2 text-right font-medium">OVR</th>
                   <th className="pb-2 text-right font-medium">Salary</th>
+                  <th className="pb-2 text-right font-medium">Status</th>
                   <th className="px-4 pb-2 text-right font-medium">Yrs</th>
                 </tr>
               </thead>
@@ -90,6 +94,7 @@ export function FrontOffice() {
                     <td className="text-right">{p.age}</td>
                     <td className="text-right">{scoutedOverall(p, team.id).ovr}</td>
                     <td className="text-right">{money(p.contract?.salary ?? 0)}</td>
+                    <td className="text-right text-xs text-muted">{STATUS_LABEL[contractStatus(p)]}</td>
                     <td className={`px-4 text-right ${p.contract?.years === 1 ? 'font-semibold text-danger' : ''}`}>{p.contract?.years}</td>
                   </tr>
                 ))}

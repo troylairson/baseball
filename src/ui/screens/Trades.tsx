@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { evaluateTrade, isPitcher, teamMode, tradeWindowOpen, type Player, type Team } from '../../engine';
+import { evaluateTrade, isPitcher, shopPlayer, suggestPackage, teamMode, tradeWindowOpen, type Player, type Team } from '../../engine';
 import { api, useGame, useSave, useUserTeam } from '../../state/game';
 import { BottomSheet } from '../components/BottomSheet';
 import { Card, PageHeader } from '../components/Card';
@@ -15,6 +15,7 @@ export function Trades() {
   const save = useSave();
   const team = useUserTeam();
   const [partnerId, setPartnerId] = useState<number | null>(null);
+  const [seed, setSeed] = useState<{ give: number[]; get: number[] }>({ give: [], get: [] });
   const tradeWindow = tradeWindowOpen(save.league);
   const ctx = { league: save.league, teams: save.teams, players: save.players, userTeamId: team.id };
 
@@ -23,11 +24,21 @@ export function Trades() {
       <>
         <PageHeader title="Trades" subtitle="Pick a trading partner" />
         {!tradeWindow.open && <p className="mb-4 rounded-2xl bg-surface-2 px-4 py-3 text-sm text-muted">{tradeWindow.reason}</p>}
+        <Offers />
+        {tradeWindow.open && (
+          <ShopPlayer
+            onPick={(id, give, get) => {
+              setSeed({ give, get });
+              setPartnerId(id);
+            }}
+          />
+        )}
+        <h2 className="mb-2 mt-2 px-1 text-sm font-semibold uppercase tracking-wide text-muted">Teams</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {save.teams.filter((t) => t.id !== team.id).map((t) => {
             const mode = teamMode(ctx, t.id);
             return (
-              <button key={t.id} onClick={() => setPartnerId(t.id)} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3 text-left hover:border-muted">
+              <button key={t.id} onClick={() => { setSeed({ give: [], get: [] }); setPartnerId(t.id); }} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3 text-left hover:border-muted">
                 <TeamBadge team={t} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-semibold">{t.city} {t.name}</span>
@@ -43,21 +54,27 @@ export function Trades() {
       </>
     );
   }
-  return <TradeBuilder partner={save.teams.find((t) => t.id === partnerId)!} onBack={() => setPartnerId(null)} />;
+  return <TradeBuilder key={partnerId} partner={save.teams.find((t) => t.id === partnerId)!} initial={seed} onBack={() => setPartnerId(null)} />;
 }
 
-function TradeBuilder({ partner, onBack }: { partner: Team; onBack: () => void }) {
+function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { give: number[]; get: number[] }; onBack: () => void }) {
   const save = useSave();
   const team = useUserTeam();
   const act = useGame((s) => s.act);
   const showToast = useGame((s) => s.showToast);
   const openPlayer = useOpenPlayer();
-  const [give, setGive] = useState<number[]>([]);
-  const [get, setGet] = useState<number[]>([]);
+  const [give, setGive] = useState<number[]>(initial.give);
+  const [get, setGet] = useState<number[]>(initial.get);
   const [picking, setPicking] = useState<'give' | 'get' | null>(null);
   const byId = useMemo(() => new Map(save.players.map((p) => [p.id, p])), [save.players]);
   const ctx = { league: save.league, teams: save.teams, players: save.players, userTeamId: team.id };
   const evaluation = evaluateTrade(ctx, { partnerId: partner.id, give, get });
+
+  const findDeal = () => {
+    const pkg = suggestPackage(ctx, partner.id, get);
+    if (pkg) setGive(pkg);
+    else showToast("Nothing you have gets this done.");
+  };
 
   const propose = async () => {
     const err = await act(() => api().trade({ partnerId: partner.id, give, get }));
@@ -122,6 +139,9 @@ function TradeBuilder({ partner, onBack }: { partner: Team; onBack: () => void }
           <div className={`h-full rounded-full ${evaluation.accepted ? 'bg-accent' : pct >= 85 ? 'bg-amber-400' : 'bg-sky-500'}`} style={{ width: `${pct}%` }} />
         </div>
         <p className="mt-2 text-sm">{evaluation.message}</p>
+        {get.length > 0 && !evaluation.accepted && (
+          <button onClick={findDeal} className="mt-2 text-sm font-semibold text-accent">Find me a package</button>
+        )}
         <button
           onClick={() => void propose()}
           disabled={!evaluation.accepted}
@@ -182,5 +202,108 @@ function PickPlayers({
       </ul>
       <button onClick={onClose} className="mt-4 h-12 w-full rounded-xl bg-accent font-semibold text-accent-contrast">Done ({selected.length})</button>
     </BottomSheet>
+  );
+}
+
+function Offers() {
+  const save = useSave();
+  const act = useGame((s) => s.act);
+  const openPlayer = useOpenPlayer();
+  const offers = (save.league.offers ?? []).filter((o) => o.expires >= save.league.date);
+  if (offers.length === 0) return null;
+  const byId = new Map(save.players.map((p) => [p.id, p]));
+  const teams = new Map(save.teams.map((t) => [t.id, t]));
+  const names = (ids: number[]) => ids.map((id) => byId.get(id)).filter(Boolean).map((p) => p!);
+  return (
+    <Card title="Offers for you" className="mb-4">
+      <ul className="space-y-3">
+        {offers.map((o) => {
+          const t = teams.get(o.partnerId)!;
+          return (
+            <li key={o.id} className="rounded-xl border border-line p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <TeamBadge team={t} size="sm" />
+                <span className="font-semibold">{t.city}</span>
+                <span className="ml-auto text-xs text-muted">until {new Date(`${o.expires}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+              </div>
+              <p className="text-sm">
+                <span className="text-muted">They want </span>
+                {names(o.give).map((p) => <button key={p.id} onClick={() => openPlayer(p.id)} className="font-medium hover:underline">{fullName(p)}</button>)}
+                <span className="text-muted"> for </span>
+                {names(o.get).map((p) => <button key={p.id} onClick={() => openPlayer(p.id)} className="font-medium hover:underline">{fullName(p)} ({p.position}, {p.age})</button>)}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button onClick={() => void act(() => api().acceptOffer(o.id))} className="h-10 flex-1 rounded-xl bg-accent text-sm font-semibold text-accent-contrast">Accept</button>
+                <button onClick={() => void act(() => api().declineOffer(o.id))} className="h-10 flex-1 rounded-xl border border-line text-sm font-semibold">Decline</button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+/** Pick one of your players and see what the league would give for him. */
+function ShopPlayer({ onPick }: { onPick: (partnerId: number, give: number[], get: number[]) => void }) {
+  const save = useSave();
+  const team = useUserTeam();
+  const openPlayer = useOpenPlayer();
+  const [open, setOpen] = useState(false);
+  const [playerId, setPlayerId] = useState<number | null>(null);
+  const mine = save.players.filter((p) => p.teamId === team.id && !p.retired && !p.injury);
+  const ctx = { league: save.league, teams: save.teams, players: save.players, userTeamId: team.id };
+  const offers = playerId !== null ? shopPlayer(ctx, playerId) : [];
+  const byId = new Map(save.players.map((p) => [p.id, p]));
+  const teams = new Map(save.teams.map((t) => [t.id, t]));
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="mb-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-line bg-surface text-sm font-semibold hover:bg-surface-2">
+        <Icon name="search" className="size-4" /> Shop one of your players
+      </button>
+      <BottomSheet open={open} onClose={() => { setOpen(false); setPlayerId(null); }} title="Shop a player">
+        {playerId === null ? (
+          <>
+            <h2 className="mb-3 pr-10 text-xl font-bold">Who are you shopping?</h2>
+            <ul className="-mx-2">
+              {mine.sort((a, b) => scoutedOverall(b, team.id).ovr - scoutedOverall(a, team.id).ovr).map((p) => (
+                <li key={p.id}>
+                  <button onClick={() => setPlayerId(p.id)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-surface-2">
+                    <span className="w-7 text-center text-xs font-bold text-muted">{p.position}</span>
+                    <span className="min-w-0 flex-1 truncate font-medium">{fullName(p)}</span>
+                    <RatingBadge value={scoutedOverall(p, team.id).ovr} size="sm" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <>
+            <h2 className="mb-1 pr-10 text-xl font-bold">Offers for {fullName(byId.get(playerId)!)}</h2>
+            <p className="mb-3 text-sm text-muted">The best player each team would give straight up.</p>
+            {offers.length === 0 ? <p className="text-sm text-muted">No takers right now.</p> : (
+              <ul className="-mx-2">
+                {offers.map((o) => {
+                  const p = byId.get(o.get[0]!)!;
+                  const t = teams.get(o.partnerId)!;
+                  return (
+                    <li key={o.partnerId} className="flex items-center gap-2 rounded-xl px-2 py-2">
+                      <TeamBadge team={t} size="sm" />
+                      <button onClick={() => openPlayer(p.id)} className="min-w-0 flex-1 text-left">
+                        <span className="block truncate font-medium">{fullName(p)}</span>
+                        <span className="block text-xs text-muted">{p.position} · age {p.age} · {money(p.contract?.salary ?? 0)}</span>
+                      </button>
+                      <RatingBadge value={scoutedOverall(p, team.id).ovr} size="sm" />
+                      <button onClick={() => { setOpen(false); setPlayerId(null); onPick(t.id, [playerId], o.get); }} className="h-9 rounded-lg border border-line px-3 text-xs font-semibold">Talk</button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <button onClick={() => setPlayerId(null)} className="mt-4 h-11 w-full rounded-xl border border-line text-sm font-medium">Pick another player</button>
+          </>
+        )}
+      </BottomSheet>
+    </>
   );
 }

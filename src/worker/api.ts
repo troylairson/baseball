@@ -1,6 +1,6 @@
 import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
-  autoDraftPick, executeTrade, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  acceptOffer, autoDraftPick, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
   type SeasonState, type TradeProposal,
 } from '../engine';
@@ -261,6 +261,26 @@ export function createEngineApi(db = new GameDB()) {
       if (!pick || pick.teamId !== state.userTeamId) return { ok: false, reason: "You're not on the clock." };
       if (!draftPlayer(state, playerId)) return { ok: false, reason: 'That player is not available.' };
       runDraft(state, false);
+      return commit();
+    },
+
+    async extend(playerId: number): Promise<ActionResult> {
+      const res = extendPlayer(current().state, playerId);
+      if (!res.ok) return res;
+      return commit();
+    },
+
+    async acceptOffer(offerId: number): Promise<ActionResult> {
+      const res = acceptOffer(current().state, offerId);
+      if (!res.ok) {
+        await commit();
+        return res;
+      }
+      return commit();
+    },
+
+    async declineOffer(offerId: number): Promise<ActionResult> {
+      declineOffer(current().state.league, offerId);
       return commit();
     },
 

@@ -52,9 +52,12 @@ export function developPlayer(p: Player, rng: Rng, coaching: Coaching = { hittin
       stamina: step(c.stamina, pp.stamina, 0.8),
     };
   }
-  p.fielding.defense = clampRating(p.fielding.defense - (age >= 30 ? (age - 29) * 0.7 : 0) + rng.normal(0, 1));
+  // Gloves sharpen through the mid-20s and fade after 30.
+  const glove = age <= 26 ? 0.9 : age >= 30 ? -(age - 29) * 0.7 : 0;
+  const gloveNoise = rng.normal(0, 1);
+  p.fielding.defense = clampRating(p.fielding.defense + glove + gloveNoise);
   for (const pos of Object.keys(p.positionRatings) as (keyof Player['positionRatings'])[]) {
-    p.positionRatings[pos] = clampRating(p.positionRatings[pos]! - (age >= 30 ? (age - 29) * 0.7 : 0) + rng.normal(0, 1));
+    p.positionRatings[pos] = clampRating(p.positionRatings[pos]! + glove + gloveNoise);
   }
 
   // Potential: prospects' ceilings wobble; past 27 the ceiling is what you are.
