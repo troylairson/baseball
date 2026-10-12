@@ -2,7 +2,12 @@ import { addLine, emptyBatting, emptyPitching, type PlayerSeasonStats } from '..
 import type { League, Player, ScheduledGame, Team } from '../model/types';
 import { Rng } from '../rng';
 import { simGame, type GameResult, type TeamGameInput } from '../sim/game';
-import { autoPlan, type GamePlan } from '../sim/lineup';
+import { resolvePlan, type GamePlan } from '../sim/lineup';
+import { computeNorms, type RatingNorms } from '../sim/norms';
+import { addNews } from './news';
+import {
+  activeSeries, advanceBracket, createPlayoffs, nextSeriesGame, recordSeriesGame, roundName,
+} from './playoffs';
 import { addDays } from './schedule';
 
 export interface SeasonState {
@@ -13,6 +18,8 @@ export interface SeasonState {
   stats: Map<number, PlayerSeasonStats>;
   userTeamId: number;
   seed: number;
+  /** League rating averages for this season; computed lazily. */
+  norms?: RatingNorms;
 }
 
 export interface PlayedGame {
@@ -24,8 +31,15 @@ export interface PlayedGame {
 export const STARTER_READY = 25;
 const RECOVERY = { SP: 20, RP: 12 };
 
-export function seasonOver(state: SeasonState): boolean {
-  return state.schedule.every((g) => g.played);
+const isRegular = (g: ScheduledGame) => g.seriesId === undefined;
+
+/** True once every regular-season game has been played. */
+export function seasonOver(state: Pick<SeasonState, 'schedule'>): boolean {
+  return state.schedule.every((g) => !isRegular(g) || g.played);
+}
+
+export function playoffsOver(state: Pick<SeasonState, 'league'>): boolean {
+  return !!state.league.playoffs && state.league.playoffs.championId !== null;
 }
 
 export function nextGameFor(state: SeasonState, teamId: number): ScheduledGame | undefined {
@@ -33,11 +47,12 @@ export function nextGameFor(state: SeasonState, teamId: number): ScheduledGame |
 }
 
 export function activeRoster(players: Player[], teamId: number): Player[] {
-  return players.filter((p) => p.teamId === teamId && p.level === 'MLB');
+  return players.filter((p) => p.teamId === teamId && p.level === 'MLB' && !p.retired);
 }
 
 export function planFor(state: SeasonState, teamId: number): GamePlan {
-  return autoPlan(activeRoster(state.players, teamId), state.league.settings.designatedHitter);
+  const team = state.teams.find((t) => t.id === teamId);
+  return resolvePlan(activeRoster(state.players, teamId), team?.plan, state.league.settings.designatedHitter);
 }
 
 /** Next rested starter in the rotation; advances the team's rotation pointer. */
@@ -67,7 +82,7 @@ function statsFor(state: SeasonState, player: Player): PlayerSeasonStats {
 
 function teamInput(state: SeasonState, team: Team): TeamGameInput {
   const roster = activeRoster(state.players, team.id);
-  const plan = autoPlan(roster, state.league.settings.designatedHitter);
+  const plan = resolvePlan(roster, team.plan, state.league.settings.designatedHitter);
   const starterId = pickStarter(team, plan, new Map(roster.map((p) => [p.id, p])));
   return { team, roster, plan, starterId };
 }
@@ -80,32 +95,134 @@ export function startSeason(state: SeasonState): void {
   if (first) state.league.date = first.date;
 }
 
-/** Simulate every game on the current date, then advance one day. */
+/** Set up the bracket once the regular season is complete. */
+export function startPlayoffs(state: SeasonState): void {
+  const { league } = state;
+  if (league.phase !== 'regular' || !seasonOver(state)) return;
+  league.phase = 'playoffs';
+  league.playoffs = createPlayoffs(league, state.teams);
+  const lastRegular = state.schedule.filter(isRegular).at(-1)?.date ?? league.date;
+  league.date = addDays(lastRegular, 2);
+  const inField = new Set(league.playoffs.series.flatMap((s) => [s.highId, s.lowId]));
+  const user = state.teams.find((t) => t.id === state.userTeamId)!;
+  addNews(league, {
+    kind: 'league',
+    title: `${league.season} playoffs begin`,
+    body: inField.has(user.id)
+      ? `The ${user.name} are in the field of ${inField.size}.`
+      : `The ${user.name} missed the postseason.`,
+    mine: true,
+  });
+  for (const p of state.players) p.fatigue = 0;
+}
+
+function playGame(state: SeasonState, game: ScheduledGame, teams: Map<number, Team>): PlayedGame {
+  const { league } = state;
+  const home = teams.get(game.homeId)!;
+  const away = teams.get(game.awayId)!;
+  const withLog = home.id === state.userTeamId || away.id === state.userTeamId;
+  const result = simGame(
+    teamInput(state, away),
+    teamInput(state, home),
+    league.settings.designatedHitter,
+    new Rng(`${state.seed}-${league.season}-${game.id}`),
+    withLog,
+    (state.norms ??= computeNorms(state.players)),
+  );
+  game.played = true;
+  game.homeScore = result.home.runs;
+  game.awayScore = result.away.runs;
+  game.innings = result.innings;
+  return { game, result };
+}
+
+function applyWorkload(state: SeasonState, result: GameResult, countStats: boolean, players: Map<number, Player>): void {
+  for (const box of [result.home, result.away]) {
+    if (countStats) {
+      for (const b of box.batters) addLine(statsFor(state, players.get(b.playerId)!).bat, b.line);
+    }
+    for (const p of box.pitchers) {
+      const player = players.get(p.playerId)!;
+      if (countStats) addLine(statsFor(state, player).pit, p.line);
+      player.fatigue += p.line.pitches + (p.line.gs ? 0 : 10);
+    }
+  }
+}
+
+function recover(state: SeasonState): void {
+  for (const p of state.players) {
+    if (p.fatigue > 0) p.fatigue = Math.max(0, p.fatigue - (p.position === 'SP' ? RECOVERY.SP : RECOVERY.RP));
+  }
+}
+
+function simPlayoffDay(state: SeasonState, teams: Map<number, Team>): PlayedGame[] {
+  const { league } = state;
+  const players = new Map(state.players.map((p) => [p.id, p]));
+  const playoffs = league.playoffs!;
+  const played: PlayedGame[] = [];
+  let nextId = Math.max(league.season * 10000 + 9000, ...state.schedule.map((g) => g.id)) + 1;
+  for (const series of activeSeries(playoffs)) {
+    const game = nextSeriesGame(series, nextId++, league.date);
+    state.schedule.push(game);
+    const pg = playGame(state, game, teams);
+    applyWorkload(state, pg.result, false, players);
+    const winner = game.homeScore! > game.awayScore! ? game.homeId : game.awayId;
+    recordSeriesGame(series, winner);
+    if (series.winnerId !== null) {
+      const w = teams.get(series.winnerId)!;
+      const l = teams.get(series.winnerId === series.highId ? series.lowId! : series.highId!)!;
+      const wins = Math.max(series.highWins, series.lowWins);
+      const losses = Math.min(series.highWins, series.lowWins);
+      addNews(league, {
+        kind: 'league',
+        title: `${w.city} win the ${roundName(series)}`,
+        body: `${w.city} ${w.name} defeat the ${l.name}, ${wins}–${losses}.`,
+        teamId: w.id,
+        mine: w.id === state.userTeamId || l.id === state.userTeamId,
+      });
+    }
+    played.push(pg);
+  }
+  advanceBracket(playoffs, state.teams);
+  if (playoffs.championId !== null) {
+    const champ = teams.get(playoffs.championId)!;
+    addNews(league, {
+      kind: 'league',
+      title: `${champ.city} ${champ.name} are ${league.season} champions!`,
+      teamId: champ.id,
+      mine: champ.id === state.userTeamId,
+    });
+  }
+  return played;
+}
+
+/**
+ * Simulate one day: regular-season games, or the next game of every active
+ * playoff series. Moves preseason → regular → playoffs automatically.
+ */
 export function simDay(state: SeasonState): PlayedGame[] {
   startSeason(state);
-  if (state.league.phase !== 'regular' || seasonOver(state)) return [];
+  if (state.league.phase === 'regular' && seasonOver(state)) startPlayoffs(state);
   const { league } = state;
   const teams = new Map(state.teams.map((t) => [t.id, t]));
-  const players = new Map(state.players.map((p) => [p.id, p]));
-  const today = state.schedule.filter((g) => g.date === league.date && !g.played);
-  const played: PlayedGame[] = [];
 
+  if (league.phase === 'playoffs') {
+    if (playoffsOver(state)) return [];
+    const played = simPlayoffDay(state, teams);
+    recover(state);
+    league.date = addDays(league.date, 1);
+    return played;
+  }
+  if (league.phase !== 'regular') return [];
+
+  const today = state.schedule.filter((g) => g.date === league.date && !g.played);
+  const players = new Map(state.players.map((p) => [p.id, p]));
+  const played: PlayedGame[] = [];
   for (const game of today) {
+    const pg = playGame(state, game, teams);
+    const { result } = pg;
     const home = teams.get(game.homeId)!;
     const away = teams.get(game.awayId)!;
-    const withLog = home.id === state.userTeamId || away.id === state.userTeamId;
-    const result = simGame(
-      teamInput(state, away),
-      teamInput(state, home),
-      league.settings.designatedHitter,
-      new Rng(`${state.seed}-${league.season}-${game.id}`),
-      withLog,
-    );
-
-    game.played = true;
-    game.homeScore = result.home.runs;
-    game.awayScore = result.away.runs;
-    game.innings = result.innings;
     const homeWon = result.home.runs > result.away.runs;
     (homeWon ? home : away).wins++;
     (homeWon ? away : home).losses++;
@@ -113,22 +230,13 @@ export function simDay(state: SeasonState): PlayedGame[] {
     home.runsAllowed += result.away.runs;
     away.runsScored += result.away.runs;
     away.runsAllowed += result.home.runs;
-
-    for (const box of [result.home, result.away]) {
-      for (const b of box.batters) addLine(statsFor(state, players.get(b.playerId)!).bat, b.line);
-      for (const p of box.pitchers) {
-        const player = players.get(p.playerId)!;
-        addLine(statsFor(state, player).pit, p.line);
-        player.fatigue += p.line.pitches + (p.line.gs ? 0 : 10);
-      }
-    }
-    played.push({ game, result });
+    applyWorkload(state, result, true, players);
+    played.push(pg);
   }
 
-  for (const p of state.players) {
-    if (p.fatigue > 0) p.fatigue = Math.max(0, p.fatigue - (p.position === 'SP' ? RECOVERY.SP : RECOVERY.RP));
-  }
+  recover(state);
   const next = state.schedule.find((g) => !g.played);
-  league.date = next ? (next.date > league.date ? next.date : addDays(league.date, 1)) : league.date;
+  league.date = next ? (next.date > league.date ? next.date : addDays(league.date, 1)) : addDays(league.date, 1);
   return played;
 }
+

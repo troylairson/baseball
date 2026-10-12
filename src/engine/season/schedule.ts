@@ -18,9 +18,9 @@ export function openingDay(season: number): string {
  * Round-robin schedule built from three-game series (circle method). Every
  * team plays exactly `gamesPerSeason` games, never twice on the same day, with
  * an off day after every two series. With an odd number of teams, byes mean
- * totals can differ by up to one series.
+ * totals can differ by up to one series. Game ids are unique across seasons.
  */
-export function generateSchedule(teams: Team[], gamesPerSeason: number, season: number, rng: Rng): ScheduledGame[] {
+export function generateSchedule(teams: Team[], gamesPerSeason: number, season: number, rng: Rng, idBase = season * 10000): ScheduledGame[] {
   const ids = rng.shuffle(teams.map((t) => t.id));
   if (ids.length % 2) ids.push(-1); // bye
   const n = ids.length;
@@ -42,7 +42,7 @@ export function generateSchedule(teams: Team[], gamesPerSeason: number, season: 
   const played = new Map<number, number>(ids.map((id) => [id, 0]));
   const homeGames = new Map<number, number>(ids.map((id) => [id, 0]));
   let date = openingDay(season);
-  let id = 1;
+  let id = idBase + 1;
   for (let cycle = 0, series = 0; cycle < 100 && teams.every((t) => played.get(t.id)! < gamesPerSeason); cycle++) {
     for (const round of rounds) {
       const remaining = Math.min(...teams.map((t) => gamesPerSeason - played.get(t.id)!));

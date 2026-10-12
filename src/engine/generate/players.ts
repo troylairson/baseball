@@ -68,9 +68,9 @@ function pitching(talent: number, starter: boolean, rng: Rng): PitchingRatings {
   const archetype = rng.weighted([['balanced', 3], ['power', 2], ['finesse', 2]] as const);
   const shape = { balanced: [0, 0, 0], power: [7, -5, -1], finesse: [-5, 6, 3] }[archetype];
   return {
-    stuff: clampRating(talent + shape[0]! + rng.normal(0, 6)),
-    control: clampRating(talent + shape[1]! + rng.normal(0, 6)),
-    movement: clampRating(talent + shape[2]! + rng.normal(0, 6)),
+    stuff: clampRating(talent + shape[0]! + rng.normal(0, 4.5)),
+    control: clampRating(talent + shape[1]! + rng.normal(0, 4.5)),
+    movement: clampRating(talent + shape[2]! + rng.normal(0, 4.5)),
     stamina: clampRating(starter ? rng.normal(62, 7) : rng.normal(35, 8)),
   };
 }
@@ -154,6 +154,7 @@ export function generatePlayer(spec: PlayerSpec, rng: Rng, usedNames?: Set<strin
     contract: null,
     scoutSeed: rng.nextUint32(),
     fatigue: 0,
+    experience: spec.level === 'MLB' ? Math.max(0, age - rng.int(21, 25)) : 0,
   };
 }
 

@@ -7,6 +7,7 @@ import { RatingBadge } from '../components/Rating';
 import { DivisionStandings } from '../components/Standings';
 import { TeamBadge } from '../components/TeamBadge';
 import { GameRow } from '../components/GameRow';
+import { Inbox } from '../components/Inbox';
 import { fullName, money, shortName } from '../format';
 import { useOpenGame, useOpenPlayer } from '../hooks';
 import { scoutedOverall } from '../scouting';
@@ -35,7 +36,6 @@ export function Home() {
     .filter(({ stats }) => stats && stats.bat.pa >= 60 && avg(stats.bat) < 0.2)
     .sort((a, b) => avg(a.stats.bat) - avg(b.stats.bat))[0];
 
-  const expectation = rank <= teams.length / 4 ? 'Win the division' : rank <= teams.length / 2 ? 'Contend for a playoff spot' : rank <= (teams.length * 3) / 4 ? 'Finish above .500' : 'Rebuild and develop youth';
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -87,15 +87,13 @@ export function Home() {
         </ul>
       </Card>
 
-      <Card title="Owner expectations">
-        <p className="text-lg font-semibold">{expectation}</p>
-        <p className="mt-1 text-sm text-muted">Based on your roster ranking #{rank} of {teams.length}. Job security starts at 100%.</p>
-        <div className="mt-3 h-2 rounded-full bg-surface-2">
-          <div className="h-full w-full rounded-full bg-accent" />
-        </div>
-      </Card>
+      <OwnerCard />
 
-      <GamesCard />
+      {league.phase === 'offseason' ? <OffseasonCard /> : <GamesCard />}
+
+      <div className="md:col-span-2">
+        <Inbox news={league.news ?? []} />
+      </div>
 
       <Card title="Division" className="md:col-span-2">
         <DivisionStandings division={division} teams={teams} userTeamId={team.id} />
@@ -118,6 +116,35 @@ export function Home() {
   );
 }
 
+function OwnerCard() {
+  const { league } = useSave();
+  const owner = league.owner;
+  if (!owner) return null;
+  return (
+    <Card title="Owner">
+      <p className="text-lg font-semibold">{owner.expectation}</p>
+      <p className="mt-1 text-sm text-muted">Target: about {owner.targetWins} wins this season.</p>
+      <div className="mt-3 mb-1 flex justify-between text-sm"><span className="text-muted">Job security</span><strong className="tabular-nums">{owner.jobSecurity}%</strong></div>
+      <div className="h-2 rounded-full bg-surface-2">
+        <div className={`h-full rounded-full ${owner.jobSecurity < 25 ? 'bg-danger' : 'bg-accent'}`} style={{ width: `${owner.jobSecurity}%` }} />
+      </div>
+      {owner.fired && <p className="mt-2 text-sm text-danger">You've been fired — this league is now in sandbox mode.</p>}
+    </Card>
+  );
+}
+
+function OffseasonCard() {
+  const { league } = useSave();
+  const label = { review: 'Season review', resign: 'Re-sign your players', freeAgency: 'Free agency is open', draft: 'The draft is on' }[league.offseason ?? 'review'];
+  return (
+    <Card title="Offseason">
+      <p className="text-lg font-semibold">{label}</p>
+      <p className="mt-1 text-sm text-muted">Shape next year's roster before the {league.season + 1} season.</p>
+      <Link to="/play/offseason" className="mt-3 flex h-11 items-center justify-center rounded-xl bg-accent text-sm font-semibold text-accent-contrast">Go to the offseason</Link>
+    </Card>
+  );
+}
+
 function GamesCard() {
   const { schedule, teams, players, league } = useSave();
   const team = useUserTeam();
@@ -126,7 +153,7 @@ function GamesCard() {
   const teamMap = new Map(teams.map((t) => [t.id, t]));
   const mine = schedule.filter((g) => g.homeId === team.id || g.awayId === team.id);
   const last = mine.filter((g) => g.played).at(-1);
-  const next = mine.find((g) => !g.played);
+  const next = mine.find((g) => !g.played && g.seriesId === undefined);
 
   // Probable starters: the next rested arm in each rotation.
   const probable = (teamId: number) => {
@@ -136,6 +163,31 @@ function GamesCard() {
     const id = pickStarter({ ...t }, plan, new Map(roster.map((p) => [p.id, p])), false);
     return players.find((p) => p.id === id);
   };
+
+  if (league.phase === 'playoffs') {
+    const series = league.playoffs?.series.find((s) => s.winnerId === null && (s.highId === team.id || s.lowId === team.id));
+    const opp = series ? teamMap.get(series.highId === team.id ? series.lowId! : series.highId!) : undefined;
+    return (
+      <Card title="Playoffs">
+        {league.playoffs?.championId != null ? (
+          <p className="font-semibold">{teamMap.get(league.playoffs.championId)!.city} won it all. On to the offseason.</p>
+        ) : series && opp ? (
+          <p className="font-semibold">
+            vs {opp.city}: {series.highId === team.id ? series.highWins : series.lowWins}–{series.highId === team.id ? series.lowWins : series.highWins} in a best of {series.bestOf}
+          </p>
+        ) : (
+          <p className="text-sm text-muted">Your season is over. Sim the rest of the playoffs to reach the offseason.</p>
+        )}
+        <Link to="/play/league" className="mt-3 inline-block text-sm font-medium text-accent">View bracket</Link>
+        {last && (
+          <div className="mt-3 border-t border-line pt-2">
+            <p className="px-2 text-[11px] uppercase tracking-wide text-muted">Last game</p>
+            <div className="-mx-2"><GameRow game={last} teamId={team.id} teams={teamMap} onOpen={openGame} /></div>
+          </div>
+        )}
+      </Card>
+    );
+  }
 
   return (
     <Card title={next ? (league.phase === 'preseason' ? 'Opening Day' : 'Next game') : 'Season'}>
@@ -155,7 +207,7 @@ function GamesCard() {
           </div>
         </>
       ) : (
-        <p className="text-sm text-muted">The regular season is complete. Playoffs and the offseason arrive next.</p>
+        <p className="text-sm text-muted">The regular season is complete. Tap Playoffs to begin the postseason.</p>
       )}
       {last && (
         <div className="mt-3 border-t border-line pt-2">

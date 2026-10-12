@@ -7,6 +7,7 @@ import { formatDate } from '../format';
 import { PlayerSheet } from '../screens/PlayerSheet';
 import { SettingsSheet } from '../screens/SettingsSheet';
 import { NAV_ITEMS } from './nav';
+import { Toast } from '../components/Toast';
 import { SimButton, SimProgressBar } from './SimControls';
 import { BoxScoreSheet } from '../screens/BoxScoreSheet';
 
@@ -44,6 +45,7 @@ function Shell() {
       <BoxScoreSheet gameId={gameId} onClose={closeGame} />
       <PlayerSheet playerId={playerId} onClose={closePlayer} />
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <Toast />
     </div>
   );
 }
@@ -51,7 +53,7 @@ function Shell() {
 function TopBar({ onSettings }: { onSettings: () => void }) {
   const team = useUserTeam();
   const league = useGame((s) => s.save!.league);
-  const seasonDone = useGame((s) => s.save!.schedule.every((g) => g.played));
+  const seasonDone = useGame((s) => s.save!.schedule.every((g) => g.seriesId !== undefined || g.played));
   return (
     <header className="pt-safe sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 md:px-8">
@@ -73,7 +75,7 @@ function TopBar({ onSettings }: { onSettings: () => void }) {
 }
 
 function phaseLabel(phase: string, seasonDone: boolean): string {
-  if (phase === 'regular' && seasonDone) return 'Season complete';
+  if (phase === 'regular' && seasonDone) return 'Regular season complete';
   return { preseason: 'Preseason', regular: 'Season', playoffs: 'Playoffs', offseason: 'Offseason' }[phase] ?? phase;
 }
 

@@ -3,7 +3,7 @@ import type { Rng } from '../rng';
 
 /** League-average rates per plate appearance (modern MLB baseline). */
 export const LEAGUE = {
-  k: 0.218,
+  k: 0.226,
   bb: 0.075,
   hbp: 0.011,
   hr: 0.028,
@@ -50,13 +50,13 @@ export function paProbabilities(ctx: PaContext): PaProbabilities {
   const platoon = sameSide ? { k: 1.07, hr: 0.9, babip: -0.007, bb: 0.95 } : { k: 0.97, hr: 1.04, babip: 0.003, bb: 1.02 };
 
   const kB = LEAGUE.k * f(bat.contact, -0.3) * f(bat.eye, -0.06);
-  const kP = LEAGUE.k * f(pitch.stuff, 0.3) * f(pitch.movement, 0.05);
+  const kP = LEAGUE.k * f(pitch.stuff, 0.22) * f(pitch.movement, 0.03);
   const bbB = LEAGUE.bb * f(bat.eye, 0.32);
-  const bbP = LEAGUE.bb * f(pitch.control, -0.34);
+  const bbP = LEAGUE.bb * f(pitch.control, -0.25);
   const hrB = LEAGUE.hr * f(bat.power, 0.33);
-  const hrP = LEAGUE.hr * f(pitch.movement, -0.3) * f(pitch.stuff, -0.08);
+  const hrP = LEAGUE.hr * f(pitch.movement, -0.22) * f(pitch.stuff, -0.06);
   const babipB = LEAGUE.babip + (bat.contact - 50) * 0.0018 + (bat.speed - 50) * 0.0006;
-  const babipP = LEAGUE.babip - (pitch.movement - 50) * 0.0012 - (pitch.stuff - 50) * 0.0005;
+  const babipP = LEAGUE.babip - (pitch.movement - 50) * 0.0008 - (pitch.stuff - 50) * 0.0003;
 
   return {
     k: log5(kB, kP, LEAGUE.k) * platoon.k,

@@ -1,5 +1,6 @@
 import { emptyBatting, emptyPitching, type BattingLine, type PitchingLine } from '../model/stats';
-import type { FieldPosition, PitchingRatings, Player, Team } from '../model/types';
+import type { BattingRatings, FieldPosition, PitchingRatings, Player, Team } from '../model/types';
+import { BASE_NORMS, type RatingNorms } from './norms';
 import type { Rng } from '../rng';
 import { defenseAt, type GamePlan, type LineupSlot } from './lineup';
 import { pitchesFor, resolvePa, type PaResult } from './pa';
@@ -104,8 +105,24 @@ function teamDefense(lineup: LineupSlot[], players: Map<number, Player>): number
 
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
-export function simGame(awayIn: TeamGameInput, homeIn: TeamGameInput, useDH: boolean, rng: Rng, withLog = false): GameResult {
+export function simGame(
+  awayIn: TeamGameInput, homeIn: TeamGameInput, useDH: boolean, rng: Rng, withLog = false, norms: RatingNorms = BASE_NORMS,
+): GameResult {
   const log: string[] = [];
+  // Shift ratings so the league average of this era plays like the calibrated baseline.
+  const shift = {
+    contact: norms.contact - BASE_NORMS.contact, power: norms.power - BASE_NORMS.power, eye: norms.eye - BASE_NORMS.eye,
+    stuff: norms.stuff - BASE_NORMS.stuff, control: norms.control - BASE_NORMS.control, movement: norms.movement - BASE_NORMS.movement,
+  };
+  const batCache = new Map<number, BattingRatings>();
+  const batRatings = (p: Player): BattingRatings => {
+    let r = batCache.get(p.id);
+    if (!r) {
+      r = { ...p.batting, contact: p.batting.contact - shift.contact, power: p.batting.power - shift.power, eye: p.batting.eye - shift.eye };
+      batCache.set(p.id, r);
+    }
+    return r;
+  };
   const say = (s: string) => withLog && log.push(s);
 
   const makeSide = (input: TeamGameInput): Side => {
@@ -165,7 +182,12 @@ export function simGame(awayIn: TeamGameInput, homeIn: TeamGameInput, useDH: boo
     const base = p.pitching ?? { stuff: 25, control: 30, movement: 25, stamina: 20 };
     const over = Math.max(0, app.line.pitches - pitchLimit(p, app.role === 'SP'));
     const tired = over * 0.5 + Math.max(0, p.fatigue - 20) * 0.15;
-    return { stuff: base.stuff - tired, control: base.control - tired * 0.8, movement: base.movement - tired * 0.8, stamina: base.stamina };
+    return {
+      stuff: base.stuff - tired - shift.stuff,
+      control: base.control - tired * 0.8 - shift.control,
+      movement: base.movement - tired * 0.8 - shift.movement,
+      stamina: base.stamina,
+    };
   };
 
   const used = (side: Side) => new Set(side.pitchers.map((a) => a.playerId));
@@ -299,7 +321,7 @@ export function simGame(awayIn: TeamGameInput, homeIn: TeamGameInput, useDH: boo
         bat.batterIdx = (bat.batterIdx + 1) % bat.order.length;
         const batter = bat.players.get(slot.playerId)!;
         const result: PaResult = resolvePa(
-          { bat: batter.batting, bats: batter.bats, pitch: effective(field, app), throws: pitcher.throws, defense: field.defense },
+          { bat: batRatings(batter), bats: batter.bats, pitch: effective(field, app), throws: pitcher.throws, defense: field.defense },
           rng,
         );
         const b = slot.line;

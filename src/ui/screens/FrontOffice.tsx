@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useSave, useUserTeam } from '../../state/game';
 import { Card, PageHeader, SoonBadge } from '../components/Card';
 import { Icon, type IconName } from '../components/Icon';
@@ -6,16 +7,16 @@ import { useOpenPlayer } from '../hooks';
 import { scoutedOverall } from '../scouting';
 import { payroll, payrollBudget } from '../teams';
 
-const TOOLS: { icon: IconName; title: string; detail: string }[] = [
-  { icon: 'trade', title: 'Trades', detail: 'Build deals with clear value feedback' },
-  { icon: 'pen', title: 'Free Agency', detail: 'Bid against the league for talent' },
-  { icon: 'draft', title: 'Draft', detail: 'Scout and pick amateur prospects' },
+const TOOLS: { icon: IconName; title: string; detail: string; to?: string }[] = [
+  { icon: 'trade', title: 'Trades', detail: 'Build deals with clear value feedback', to: '/play/trades' },
+  { icon: 'pen', title: 'Free Agents', detail: 'Sign available players', to: '/play/free-agents' },
+  { icon: 'draft', title: 'Draft', detail: 'Held each offseason', to: '/play/offseason' },
   { icon: 'search', title: 'Scouting', detail: 'Budgets, directors and assignments' },
   { icon: 'staff', title: 'Staff', detail: 'Coaches who shape development' },
 ];
 
 export function FrontOffice() {
-  const { players } = useSave();
+  const { players, league } = useSave();
   const team = useUserTeam();
   const openPlayer = useOpenPlayer();
   const pay = payroll(players, team.id);
@@ -44,18 +45,30 @@ export function FrontOffice() {
 
         <Card title="Tools">
           <ul className="-mx-2">
-            {TOOLS.map((t) => (
-              <li key={t.title} className="flex items-center gap-3 rounded-xl px-2 py-2">
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface-2 text-muted">
-                  <Icon name={t.icon} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-medium">{t.title}</span>
-                  <span className="block text-sm text-muted">{t.detail}</span>
-                </span>
-                <SoonBadge />
-              </li>
-            ))}
+            {TOOLS.map((t) => {
+              const enabled = t.to && (t.title !== 'Draft' || league.offseason === 'draft');
+              const body = (
+                <>
+                  <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${enabled ? 'bg-accent/12 text-accent' : 'bg-surface-2 text-muted'}`}>
+                    <Icon name={t.icon} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{t.title}</span>
+                    <span className="block text-sm text-muted">{t.detail}</span>
+                  </span>
+                  {enabled ? <Icon name="chevron" className="size-4 text-muted" /> : <SoonBadge />}
+                </>
+              );
+              return (
+                <li key={t.title}>
+                  {enabled ? (
+                    <Link to={t.to!} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-surface-2">{body}</Link>
+                  ) : (
+                    <div className="flex items-center gap-3 rounded-xl px-2 py-2">{body}</div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </Card>
 

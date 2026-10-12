@@ -88,13 +88,17 @@ export async function loadSave(db: GameDB, saveId: string): Promise<LoadedSave |
   };
 }
 
-/** Write back everything a stretch of simulation can change. */
-export async function persistProgress(
-  db: GameDB,
-  save: LoadedSave,
-  changedGames: ScheduledGame[],
-  boxScores: BoxScore[],
-): Promise<void> {
+export interface ProgressChanges {
+  changedGames?: ScheduledGame[];
+  boxScores?: BoxScore[];
+  /** Players deleted from the league (e.g. undrafted prospects). */
+  removedPlayerIds?: number[];
+  /** A new season started: replace the stored schedule. */
+  newSchedule?: boolean;
+}
+
+/** Write back everything simulation or a front-office action can change. */
+export async function persistProgress(db: GameDB, save: LoadedSave, changes: ProgressChanges = {}): Promise<void> {
   const saveId = save.meta.id;
   save.meta.updatedAt = Date.now();
   save.meta.season = save.league.season;
@@ -103,10 +107,24 @@ export async function persistProgress(
     await db.leagues.put({ ...save.league, saveId });
     await db.teams.bulkPut(save.teams.map(tag(saveId)));
     await db.players.bulkPut(save.players.map(tag(saveId)));
+    if (changes.removedPlayerIds?.length) {
+      await db.players.bulkDelete(changes.removedPlayerIds.map((id) => [saveId, id] as [string, number]));
+    }
     await db.stats.bulkPut(save.stats.map(tag(saveId)));
-    await db.games.bulkPut(changedGames.map(tag(saveId)));
-    await db.boxScores.bulkPut(boxScores.map(tag(saveId)));
+    if (changes.newSchedule) {
+      await db.games.where('saveId').equals(saveId).delete();
+      await db.games.bulkAdd(save.schedule.map(tag(saveId)));
+    } else if (changes.changedGames?.length) {
+      await db.games.bulkPut(changes.changedGames.map(tag(saveId)));
+    }
+    if (changes.boxScores?.length) await db.boxScores.bulkPut(changes.boxScores.map(tag(saveId)));
   });
+}
+
+/** All stored stats for one player across seasons. */
+export async function loadCareerStats(db: GameDB, saveId: string, playerId: number): Promise<PlayerSeasonStats[]> {
+  const rows = await db.stats.where('saveId').equals(saveId).filter((s) => s.playerId === playerId).toArray();
+  return rows.map(strip).sort((a, b) => a.season - b.season);
 }
 
 export async function loadBoxScore(db: GameDB, saveId: string, gameId: number): Promise<BoxScore | null> {

@@ -15,6 +15,8 @@ describe('engine api', () => {
     expect(loaded?.league.phase).toBe('preseason');
     expect(loaded?.schedule).toHaveLength(24);
 
+    const plan = await api.setLevel(loaded!.players.find((p) => p.teamId === 0 && p.level === 'MLB')!.id, 'AAA');
+    expect(plan.ok).toBe(true);
     const afterNext = await api.sim('next');
     expect(afterNext.league.phase).toBe('regular');
     const userGames = afterNext.schedule.filter((g) => g.played && (g.homeId === 0 || g.awayId === 0));
@@ -27,9 +29,23 @@ describe('engine api', () => {
     const wins = done.teams.reduce((s, t) => s + t.wins, 0);
     expect(wins).toBe(24);
 
-    // A fresh API instance sees the persisted state.
-    const again = await createEngineApi(new GameDB('api-test')).loadSave(id);
-    expect(again?.teams.map((t) => t.wins)).toEqual(done.teams.map((t) => t.wins));
-    expect(again?.stats.length).toBeGreaterThan(0);
+    // Playoffs, then the offseason stages back to a new preseason.
+    const post = await api.sim('playoffs');
+    expect(post.league.playoffs?.championId).not.toBeNull();
+    let r = await api.advance();
+    expect(r.ok && r.save.league.offseason).toBe('review');
+    for (const stage of ['resign', 'freeAgency', 'draft']) {
+      r = await api.advance();
+      expect(r.ok && r.save.league.offseason).toBe(stage);
+    }
+    r = await api.advance();
+    expect(r.ok && r.save.league.phase).toBe('preseason');
+    expect(r.ok && r.save.league.season).toBe(2028);
+    const reloaded = await createEngineApi(new GameDB('api-test')).loadSave(id);
+    expect(reloaded?.league.season).toBe(2028);
+    expect(reloaded?.schedule.every((g) => !g.played)).toBe(true);
+    expect(reloaded?.players.some((p) => p.draftProspect)).toBe(false);
+    expect(reloaded?.league.history).toHaveLength(1);
+
   });
 });

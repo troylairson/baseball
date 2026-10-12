@@ -1,50 +1,75 @@
 import { useState } from 'react';
-import { useGame } from '../../state/game';
+import { useNavigate } from 'react-router-dom';
+import { api, useGame } from '../../state/game';
 import type { SimMode } from '../../worker/api';
 import { BottomSheet } from '../components/BottomSheet';
 import { Icon } from '../components/Icon';
 import { formatDate } from '../format';
 
-const OPTIONS: { mode: SimMode; label: string; detail: string }[] = [
+const SEASON_OPTIONS: { mode: SimMode; label: string; detail: string }[] = [
   { mode: 'next', label: 'Next game', detail: 'Play through your next game' },
   { mode: 'week', label: 'One week', detail: 'Sim the next 7 days' },
   { mode: 'month', label: 'One month', detail: 'Sim the next 30 days' },
   { mode: 'season', label: 'Rest of season', detail: 'Sim to the end of the regular season' },
 ];
+const PLAYOFF_OPTIONS: typeof SEASON_OPTIONS = [
+  { mode: 'next', label: 'Next game', detail: 'Play the next playoff game' },
+  { mode: 'playoffs', label: 'Rest of playoffs', detail: 'Sim until a champion is crowned' },
+];
 
-/** Split button: tap to play the next game, chevron for longer sims. */
+type Primary = { label: string; run: () => void; menu: boolean; disabled?: boolean };
+
+/** Split button whose primary action follows the season: play, playoffs, offseason. */
 export function SimButton() {
   const save = useGame((s) => s.save)!;
   const simulate = useGame((s) => s.simulate);
+  const act = useGame((s) => s.act);
   const running = useGame((s) => s.sim !== null);
+  const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
-  const over = save.schedule.every((g) => g.played);
-  const label = over ? 'Final' : save.league.phase === 'preseason' ? 'Play ball' : 'Play';
+  const { league, schedule } = save;
+  const regularDone = schedule.every((g) => g.seriesId !== undefined || g.played);
+
+  let primary: Primary;
+  if (league.phase === 'offseason') {
+    primary = { label: 'Offseason', run: () => navigate('/play/offseason'), menu: false };
+  } else if (league.phase === 'playoffs' && league.playoffs?.championId != null) {
+    primary = {
+      label: 'Offseason',
+      run: () => void act(() => api().advance()).then((err) => !err && navigate('/play/offseason')),
+      menu: false,
+    };
+  } else if (league.phase === 'playoffs') {
+    primary = { label: 'Play', run: () => void simulate('next'), menu: true };
+  } else if (regularDone) {
+    primary = { label: 'Playoffs', run: () => void simulate('next'), menu: false };
+  } else {
+    primary = { label: league.phase === 'preseason' ? 'Play ball' : 'Play', run: () => void simulate('next'), menu: true };
+  }
+  const options = league.phase === 'playoffs' ? PLAYOFF_OPTIONS : SEASON_OPTIONS;
 
   return (
     <>
       <div className="flex h-10 overflow-hidden rounded-full bg-accent text-accent-contrast">
-        <button
-          onClick={() => simulate('next')}
-          disabled={over || running}
-          className="flex items-center gap-1.5 pl-4 pr-3 text-sm font-semibold disabled:opacity-50"
-        >
-          <Icon name="play" className="size-4" /> {label}
+        <button onClick={primary.run} disabled={running} className={`flex items-center gap-1.5 pl-4 text-sm font-semibold disabled:opacity-50 ${primary.menu ? 'pr-3' : 'pr-4'}`}>
+          <Icon name="play" className="size-4" /> {primary.label}
         </button>
-        <button
-          onClick={() => setMenu(true)}
-          disabled={over || running}
-          className="grid w-9 place-items-center border-l border-accent-contrast/20 disabled:opacity-50"
-          aria-label="More sim options"
-        >
-          <Icon name="chevron" className="size-4 rotate-90" />
-        </button>
+        {primary.menu && (
+          <button
+            onClick={() => setMenu(true)}
+            disabled={running}
+            className="grid w-9 place-items-center border-l border-accent-contrast/20 disabled:opacity-50"
+            aria-label="More sim options"
+          >
+            <Icon name="chevron" className="size-4 rotate-90" />
+          </button>
+        )}
       </div>
       <BottomSheet open={menu} onClose={() => setMenu(false)} title="Simulate">
         <h2 className="mb-1 text-xl font-bold">Simulate</h2>
-        <p className="mb-4 text-sm text-muted">Today is {formatDate(save.league.date)}.</p>
+        <p className="mb-4 text-sm text-muted">Today is {formatDate(league.date)}.</p>
         <ul className="flex flex-col gap-2">
-          {OPTIONS.map((o) => (
+          {options.map((o) => (
             <li key={o.mode}>
               <button
                 onClick={() => {
@@ -79,10 +104,10 @@ export function SimProgressBar() {
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex justify-between text-xs text-muted">
             <span>Simulating{sim.progress ? ` · ${formatDate(sim.progress.date)}` : '…'}</span>
-            <span className="tabular-nums">{pct}%</span>
+            {sim.mode !== 'playoffs' && <span className="tabular-nums">{pct}%</span>}
           </div>
           <div className="h-1.5 rounded-full bg-surface-2">
-            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${pct}%` }} />
+            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${sim.mode === 'playoffs' ? 100 : pct}%` }} />
           </div>
         </div>
         <button onClick={stop} className="h-8 rounded-full border border-line px-3 text-xs font-semibold hover:bg-surface-2">Stop</button>

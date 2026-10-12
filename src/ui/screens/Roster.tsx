@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { isPitcher, type Player } from '../../engine';
+import { isPitcher, rosterIssues, type Player } from '../../engine';
 import { useSave, useUserTeam } from '../../state/game';
 import { Card, PageHeader } from '../components/Card';
 import { PlayerCard } from '../components/PlayerCard';
@@ -8,54 +8,62 @@ import { byPosition, money } from '../format';
 import { useOpenPlayer } from '../hooks';
 import { statSummary, useStatsMap } from '../stats';
 import { payroll } from '../teams';
+import { LineupEditor } from './roster/LineupEditor';
+import { StaffEditor } from './roster/StaffEditor';
 
-type View = 'hitters' | 'pitchers' | 'aaa';
+type View = 'lineup' | 'staff' | 'active' | 'aaa';
 const VIEWS = [
-  { value: 'hitters', label: 'Hitters' },
-  { value: 'pitchers', label: 'Pitchers' },
+  { value: 'lineup', label: 'Lineup' },
+  { value: 'staff', label: 'Staff' },
+  { value: 'active', label: 'Active' },
   { value: 'aaa', label: 'AAA' },
 ] as const;
 
 export function Roster() {
-  const { players } = useSave();
+  const { players, league } = useSave();
   const team = useUserTeam();
   const openPlayer = useOpenPlayer();
-  const [view, setView] = useState<View>('hitters');
   const stats = useStatsMap();
+  const [view, setView] = useState<View>('lineup');
 
-  const org = players.filter((p) => p.teamId === team.id);
+  const org = players.filter((p) => p.teamId === team.id && !p.retired);
   const mlb = org.filter((p) => p.level === 'MLB');
-  const groups: [string, Player[]][] =
-    view === 'hitters'
-      ? [['Position players', mlb.filter((p) => !isPitcher(p)).sort(byPosition)]]
-      : view === 'pitchers'
-        ? [
-            ['Rotation', mlb.filter((p) => p.position === 'SP')],
-            ['Bullpen', mlb.filter((p) => p.position === 'RP')],
-          ]
-        : [
-            ['Hitters', org.filter((p) => p.level === 'AAA' && !isPitcher(p)).sort(byPosition)],
-            ['Pitchers', org.filter((p) => p.level === 'AAA' && isPitcher(p)).sort(byPosition)],
-          ];
+  const issues = rosterIssues(mlb);
+
+  const list = (title: string, items: Player[]) => (
+    <Card key={title} title={`${title} (${items.length})`} className="px-2 sm:px-4">
+      {items.map((p) => (
+        <PlayerCard key={p.id} player={p} userTeamId={team.id} onOpen={openPlayer} statLine={statSummary(p, stats.get(p.id))} />
+      ))}
+    </Card>
+  );
 
   return (
     <>
       <PageHeader title="Roster" subtitle={`${mlb.length}/26 active · ${money(payroll(players, team.id))} payroll`} />
+      {issues.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm">
+          {issues.map((i) => <p key={i.kind}>{i.message}</p>)}
+          <p className="mt-1 text-muted">Unfixed problems are filled automatically before the next game.</p>
+        </div>
+      )}
       <div className="mb-4">
         <Segmented label="Roster view" options={VIEWS} value={view} onChange={setView} />
       </div>
-      <div className="flex flex-col gap-4">
-        {groups.map(([title, list]) => (
-          <Card key={title} title={`${title} (${list.length})`} className="px-2 sm:px-4">
-            <div className="-mx-0 flex flex-col">
-              {list.map((p) => (
-                <PlayerCard key={p.id} player={p} userTeamId={team.id} onOpen={openPlayer} statLine={statSummary(p, stats.get(p.id))} />
-              ))}
-            </div>
-          </Card>
-        ))}
-      </div>
-      <p className="mt-4 text-center text-xs text-muted">Lineups and the pitching staff are set automatically. Manual control arrives next.</p>
+      {view === 'lineup' && <LineupEditor userTeamId={team.id} useDH={league.settings.designatedHitter} />}
+      {view === 'staff' && <StaffEditor userTeamId={team.id} />}
+      {view === 'active' && (
+        <div className="flex flex-col gap-4">
+          {list('Position players', mlb.filter((p) => !isPitcher(p)).sort(byPosition))}
+          {list('Pitchers', mlb.filter(isPitcher).sort(byPosition))}
+        </div>
+      )}
+      {view === 'aaa' && (
+        <div className="flex flex-col gap-4">
+          {list('Hitters', org.filter((p) => p.level === 'AAA' && !isPitcher(p)).sort(byPosition))}
+          {list('Pitchers', org.filter((p) => p.level === 'AAA' && isPitcher(p)).sort(byPosition))}
+        </div>
+      )}
     </>
   );
 }

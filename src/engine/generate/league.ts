@@ -127,6 +127,11 @@ export function generateLeague(seed: number | string, settings: LeagueSettings =
       years: player.age < 26 ? rng.int(1, 3) : rng.int(1, Math.max(1, Math.min(6, 36 - player.age))),
     };
   }
+  // Owners fund at least the payroll they inherit, plus a little room.
+  for (const team of teams) {
+    const payroll = players.filter((p) => p.teamId === team.id).reduce((s, p) => s + p.contract!.salary, 0);
+    team.budget = Math.max(70000 + team.market * 22000, Math.round((payroll * 1.08) / 1000) * 1000);
+  }
 
   return {
     league: {

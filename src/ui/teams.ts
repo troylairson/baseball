@@ -1,21 +1,13 @@
 import { overall, type Player, type Team } from '../engine';
+export { payroll, payrollBudget } from '../engine';
 
 export function mlbRoster(players: Player[], teamId: number): Player[] {
-  return players.filter((p) => p.teamId === teamId && p.level === 'MLB');
+  return players.filter((p) => p.teamId === teamId && p.level === 'MLB' && !p.retired);
 }
 
 export function teamOverall(players: Player[], teamId: number): number {
   const roster = mlbRoster(players, teamId);
   return Math.round(roster.reduce((s, p) => s + overall(p), 0) / Math.max(1, roster.length));
-}
-
-export function payroll(players: Player[], teamId: number): number {
-  return players.filter((p) => p.teamId === teamId).reduce((s, p) => s + (p.contract?.salary ?? 0), 0);
-}
-
-/** Owner's payroll budget in $K, driven by market size. */
-export function payrollBudget(team: Team): number {
-  return 60000 + team.market * 25000;
 }
 
 export function winPct(t: Team): number {

@@ -69,6 +69,13 @@ export interface Player {
   scoutSeed: number;
   /** Accumulated pitching workload (0 = fully rested). Recovers daily. */
   fatigue: number;
+  /** Completed MLB seasons; 0 = rookie. */
+  experience?: number;
+  retired?: boolean;
+  /** In the current amateur draft pool. */
+  draftProspect?: boolean;
+  /** What a free agent (or expiring player) is asking for. */
+  demand?: Contract | null;
 }
 
 export interface Team {
@@ -82,12 +89,25 @@ export interface Team {
   divisionId: number;
   /** 1 (small market) – 5 (large market). */
   market: number;
+  /** Owner's payroll budget in $K. */
+  budget?: number;
   wins: number;
   losses: number;
   runsScored: number;
   runsAllowed: number;
   /** Index into the rotation of the pitcher due to start next. */
   rotationSlot: number;
+  /** Manager's saved lineup and staff; null = let the AI decide each game. */
+  plan?: SavedPlan | null;
+}
+
+/** Same shape as the sim's GamePlan; kept structural to avoid an import cycle. */
+export interface SavedPlan {
+  lineup: { playerId: number; position: FieldPosition | 'DH' | 'P' }[];
+  rotation: number[];
+  closer: number | null;
+  setup: number[];
+  middle: number[];
 }
 
 export interface Division {
@@ -115,6 +135,8 @@ export interface LeagueSettings {
 
 export interface ScheduledGame {
   id: number;
+  /** Set for postseason games. */
+  seriesId?: number;
   date: string;
   homeId: number;
   awayId: number;
@@ -122,6 +144,84 @@ export interface ScheduledGame {
   homeScore: number | null;
   awayScore: number | null;
   innings: number | null;
+}
+
+export interface PlayoffSeries {
+  id: number;
+  /** 1 = first round. */
+  round: number;
+  /** Conference bracket this series belongs to; null for the final. */
+  conferenceId: number | null;
+  bestOf: number;
+  /** Team with home-field advantage (better seed). Null until feeders finish. */
+  highId: number | null;
+  lowId: number | null;
+  highSeed: number;
+  lowSeed: number;
+  highWins: number;
+  lowWins: number;
+  winnerId: number | null;
+  /** Earlier-round series whose winners meet here. */
+  feeders: number[];
+}
+
+export interface PlayoffState {
+  series: PlayoffSeries[];
+  championId: number | null;
+}
+
+export interface Award {
+  name: string;
+  playerId: number;
+  teamId: number | null;
+  summary: string;
+}
+
+export interface SeasonRecord {
+  season: number;
+  championId: number | null;
+  runnerUpId: number | null;
+  standings: { teamId: number; wins: number; losses: number }[];
+  awards: Award[];
+  userTeamId: number;
+}
+
+export type NewsKind = 'league' | 'team' | 'transaction' | 'award' | 'owner' | 'draft';
+
+export interface NewsItem {
+  id: number;
+  date: string;
+  kind: NewsKind;
+  title: string;
+  body?: string;
+  playerId?: number;
+  teamId?: number;
+  /** Involves the user's team. */
+  mine?: boolean;
+}
+
+export interface OwnerState {
+  /** 0–100; reaching 0 gets you fired. */
+  jobSecurity: number;
+  targetWins: number;
+  expectation: string;
+  fired: boolean;
+  lastReview: string | null;
+}
+
+export type OffseasonStage = 'review' | 'resign' | 'freeAgency' | 'draft';
+
+export interface DraftPick {
+  overall: number;
+  round: number;
+  teamId: number;
+  playerId: number | null;
+}
+
+export interface DraftState {
+  picks: DraftPick[];
+  /** Index into picks of the team on the clock. */
+  current: number;
 }
 
 export interface League {
@@ -132,4 +232,11 @@ export interface League {
   phase: SeasonPhase;
   /** ISO date string of the current in-game day. */
   date: string;
+  playoffs?: PlayoffState | null;
+  offseason?: OffseasonStage | null;
+  draft?: DraftState | null;
+  history?: SeasonRecord[];
+  news?: NewsItem[];
+  nextNewsId?: number;
+  owner?: OwnerState;
 }

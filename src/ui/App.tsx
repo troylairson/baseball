@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { lastSaveId, useGame } from '../state/game';
 import { AppShell } from './layout/AppShell';
+import { FreeAgents } from './screens/FreeAgents';
 import { FrontOffice } from './screens/FrontOffice';
 import { Games } from './screens/Games';
 import { Home } from './screens/Home';
 import { League } from './screens/League';
 import { NewCareer } from './screens/NewCareer';
+import { Offseason } from './screens/Offseason';
 import { Roster } from './screens/Roster';
 import { Welcome } from './screens/Welcome';
 
@@ -35,6 +37,8 @@ export function App() {
           <Route path="games" element={<Games />} />
           <Route path="office" element={<FrontOffice />} />
           <Route path="league" element={<League />} />
+          <Route path="offseason" element={<Offseason />} />
+          <Route path="free-agents" element={<FreeAgents />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

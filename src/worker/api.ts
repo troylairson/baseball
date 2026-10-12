@@ -1,9 +1,13 @@
 import {
-  addDays, DEFAULT_SETTINGS, generateLeague, overall, seasonOver, simDay,
-  type GeneratedLeague, type LeagueSettings, type PlayedGame, type ScheduledGame, type SeasonState,
+  addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
+  autoDraftPick, fixRoster, letPlayerGo, rosterIssues, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
+  type SeasonState,
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
-import { createSave, deleteSave, listSaves, loadBoxScore, loadSave, persistProgress, type LoadedSave } from '../db/saves';
+import {
+  createSave, deleteSave, listSaves, loadBoxScore, loadCareerStats, loadSave, persistProgress, type LoadedSave,
+} from '../db/saves';
 
 export interface TeamPreview {
   id: number;
@@ -18,13 +22,16 @@ export interface TeamPreview {
   payroll: number;
 }
 
-export type SimMode = 'next' | 'week' | 'month' | 'season';
+export type SimMode = 'next' | 'week' | 'month' | 'season' | 'playoffs';
 
 export interface SimProgress {
   date: string;
   /** 0–1 share of the requested stretch completed. */
   fraction: number;
 }
+
+/** Result of a front-office action: the new snapshot, or why it was refused. */
+export type ActionResult = { ok: true; save: LoadedSave } | { ok: false; reason: string };
 
 const yieldToEvents = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -44,19 +51,43 @@ export function createEngineApi(db = new GameDB()) {
       session = null;
       return null;
     }
-    session = {
-      save,
-      state: {
-        league: save.league,
-        teams: save.teams,
-        players: save.players,
-        schedule: save.schedule,
-        stats: new Map(save.stats.map((s) => [s.playerId, s])),
-        userTeamId: save.meta.userTeamId,
-        seed: save.meta.seed,
-      },
+    const state: SeasonState = {
+      league: save.league,
+      teams: save.teams,
+      players: save.players,
+      schedule: save.schedule,
+      stats: new Map(save.stats.map((s) => [s.playerId, s])),
+      userTeamId: save.meta.userTeamId,
+      seed: save.meta.seed,
     };
+    const fresh = !save.league.owner;
+    ensureCareerDefaults(state);
+    session = { save, state };
+    if (fresh) await persistProgress(db, save);
     return save;
+  };
+
+  const current = () => {
+    if (!session) throw new Error('No career loaded');
+    return session;
+  };
+
+  /** Copy engine state back onto the snapshot (arrays may have been replaced). */
+  const sync = () => {
+    const { save, state } = current();
+    save.players = state.players;
+    save.schedule = state.schedule;
+    save.stats = [...state.stats.values()];
+    return save;
+  };
+
+  const user = () => current().state.teams.find((t) => t.id === current().state.userTeamId)!;
+
+  /** Persist after a front-office action and return the snapshot. */
+  const commit = async (changes?: Parameters<typeof persistProgress>[2]): Promise<ActionResult> => {
+    const save = sync();
+    await persistProgress(db, save, changes);
+    return { ok: true, save };
   };
 
   return {
@@ -102,6 +133,14 @@ export function createEngineApi(db = new GameDB()) {
       return loadBoxScore(db, session.save.meta.id, gameId);
     },
 
+    async getCareerStats(playerId: number): Promise<PlayerSeasonStats[]> {
+      if (!session) return [];
+      const stored = await loadCareerStats(db, session.save.meta.id, playerId);
+      // The current season lives in memory and may be ahead of storage.
+      const live = session.state.stats.get(playerId);
+      return [...stored.filter((s) => s.season !== session!.state.league.season), ...(live ? [live] : [])];
+    },
+
     cancelSim() {
       cancelRequested = true;
     },
@@ -111,39 +150,144 @@ export function createEngineApi(db = new GameDB()) {
      * returns the updated snapshot.
      */
     async sim(mode: SimMode, onProgress?: (p: SimProgress) => void): Promise<LoadedSave> {
-      if (!session) throw new Error('No career loaded');
-      const { save, state } = session;
+      const { state } = current();
       cancelRequested = false;
+      const startPhase = state.league.phase === 'preseason' ? 'regular' : state.league.phase;
       const startDate = state.league.phase === 'preseason' ? (state.schedule.find((g) => !g.played)?.date ?? state.league.date) : state.league.date;
       const endDate = mode === 'week' ? addDays(startDate, 7) : mode === 'month' ? addDays(startDate, 30) : null;
-      const totalGames = state.schedule.length;
-      const playedBefore = state.schedule.filter((g) => g.played).length;
-      const user = state.userTeamId;
+      const remaining = (s: SeasonState) => s.schedule.filter((g) => g.seriesId === undefined && !g.played).length;
+      const remainingBefore = remaining(state);
+      const userId = state.userTeamId;
+
+      const done = () => {
+        if (state.league.phase === 'offseason') return true;
+        if (mode === 'playoffs') return playoffsOver(state);
+        if (state.league.phase === 'playoffs') return playoffsOver(state) || startPhase !== 'playoffs';
+        // Regular season: stop at its end; the next sim starts the playoffs.
+        return seasonOver(state) && startPhase === 'regular' && mode !== 'next';
+      };
+
+      // Rosters must be legal before games: fill holes left by moves or injuries.
+      for (const team of state.teams) {
+        const org = state.players.filter((p) => p.teamId === team.id && !p.retired);
+        if (rosterIssues(org.filter((p) => p.level === 'MLB')).length === 0) continue;
+        const moves = fixRoster(org);
+        if (team.id === userId && moves.length) {
+          addNews(state.league, {
+            kind: 'team',
+            title: 'Roster filled automatically',
+            body: `${moves.length} move(s) were made so the active roster is legal.`,
+            mine: true,
+          });
+        }
+      }
 
       const played: PlayedGame[] = [];
       let days = 0;
-      while (!seasonOver(state) && !cancelRequested) {
+      while (!done() && !cancelRequested) {
         const today = simDay(state);
         played.push(...today);
         days++;
-        if (mode === 'next' && today.some(({ game }) => game.homeId === user || game.awayId === user)) break;
+        if (mode === 'next' && (today.some(({ game }) => game.homeId === userId || game.awayId === userId) || today.length === 0 && seasonOver(state))) break;
+        if (mode === 'next' && state.league.phase === 'playoffs' && startPhase === 'regular') break;
         if (endDate && state.league.date >= endDate) break;
         if (days % 3 === 0) {
           const fraction = endDate
             ? Math.min(1, days / (mode === 'week' ? 7 : 30))
-            : mode === 'season'
-              ? (state.schedule.filter((g) => g.played).length - playedBefore) / Math.max(1, totalGames - playedBefore)
-              : 0;
+            : mode === 'season' ? 1 - remaining(state) / Math.max(1, remainingBefore) : 0;
           onProgress?.({ date: state.league.date, fraction });
           await yieldToEvents();
         }
       }
 
-      save.stats = [...state.stats.values()];
-      const changed: ScheduledGame[] = played.map((p) => p.game);
-      const boxes: BoxScore[] = played.map(({ game, result }) => ({ gameId: game.id, season: state.league.season, date: game.date, result }));
-      await persistProgress(db, save, changed, boxes);
+      const changedGames: ScheduledGame[] = played.map((p) => p.game);
+      const boxScores: BoxScore[] = played.map(({ game, result }) => ({ gameId: game.id, season: state.league.season, date: game.date, result }));
+      const save = sync();
+      await persistProgress(db, save, { changedGames, boxScores });
       return save;
+    },
+
+    /** Move to the next phase / offseason stage. */
+    async advance(): Promise<ActionResult> {
+      const { state } = current();
+      const { league } = state;
+      if (league.phase === 'playoffs' && playoffsOver(state)) {
+        beginOffseason(state);
+        return commit();
+      }
+      if (league.phase === 'offseason') {
+        const seasonBefore = league.season;
+        const removed = advanceOffseason(state);
+        const newSeason = league.season !== seasonBefore;
+        return commit({ removedPlayerIds: removed, newSchedule: newSeason });
+      }
+      return { ok: false, reason: 'Nothing to advance right now.' };
+    },
+
+    // --- Roster management -------------------------------------------------
+
+    async setPlan(plan: SavedPlan | null): Promise<ActionResult> {
+      user().plan = plan;
+      return commit();
+    },
+
+    async setLevel(playerId: number, level: 'MLB' | 'AAA'): Promise<ActionResult> {
+      const { state } = current();
+      const p = state.players.find((x) => x.id === playerId);
+      if (!p || p.teamId !== state.userTeamId) return { ok: false, reason: 'That player is not in your organization.' };
+      if (p.level === level) return { ok: false, reason: `Already in ${level}.` };
+      const active = state.players.filter((x) => x.teamId === state.userTeamId && x.level === 'MLB' && !x.retired).length;
+      if (level === 'MLB' && active >= ACTIVE_ROSTER_SIZE) {
+        return { ok: false, reason: `The active roster is full (${ACTIVE_ROSTER_SIZE}). Send someone down first.` };
+      }
+      p.level = level;
+      addNews(state.league, {
+        kind: 'transaction',
+        title: level === 'MLB' ? `Called up ${p.firstName} ${p.lastName}` : `Optioned ${p.firstName} ${p.lastName} to AAA`,
+        playerId,
+        mine: true,
+      });
+      return commit();
+    },
+
+    // --- Offseason actions ---------------------------------------------------
+
+    async resign(playerId: number): Promise<ActionResult> {
+      if (!resignPlayer(current().state, playerId)) return { ok: false, reason: 'That player cannot be re-signed now.' };
+      return commit();
+    },
+
+    async letGo(playerId: number): Promise<ActionResult> {
+      letPlayerGo(current().state, playerId);
+      return commit();
+    },
+
+    async signFreeAgent(playerId: number): Promise<ActionResult> {
+      const { state } = current();
+      const res = signFreeAgent(state, state.userTeamId, playerId);
+      if (!res.ok) return res;
+      return commit();
+    },
+
+    async draft(playerId: number): Promise<ActionResult> {
+      const { state } = current();
+      const draft = state.league.draft;
+      const pick = draft?.picks[draft.current];
+      if (!pick || pick.teamId !== state.userTeamId) return { ok: false, reason: "You're not on the clock." };
+      if (!draftPlayer(state, playerId)) return { ok: false, reason: 'That player is not available.' };
+      runDraft(state, false);
+      return commit();
+    },
+
+    /** Let the scouting department make the user's current pick. */
+    async autoPick(): Promise<ActionResult> {
+      const { state } = current();
+      const draft = state.league.draft;
+      const pick = draft?.picks[draft.current];
+      if (!pick || pick.teamId !== state.userTeamId) return { ok: false, reason: "You're not on the clock." };
+      autoDraftPick(state);
+      runDraft(state, false);
+      return commit();
     },
   };
 }

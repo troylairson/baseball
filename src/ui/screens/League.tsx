@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useSave } from '../../state/game';
 import { Card, PageHeader } from '../components/Card';
+import { Bracket } from '../components/Bracket';
+import { HistoryList } from '../components/History';
 import { LeaderBoard } from '../components/Leaders';
 import { BATTING_LEADERS, PITCHING_LEADERS } from '../stats';
 import { RatingBadge } from '../components/Rating';
@@ -10,16 +12,18 @@ import { TeamBadge } from '../components/TeamBadge';
 import { money } from '../format';
 import { payroll, teamOverall } from '../teams';
 
-type View = 'standings' | 'leaders' | 'power';
-const VIEWS = [
-  { value: 'standings', label: 'Standings' },
-  { value: 'leaders', label: 'Leaders' },
-  { value: 'power', label: 'Power' },
-] as const;
+type View = 'standings' | 'leaders' | 'playoffs' | 'history' | 'power';
 
 export function League() {
   const { league, teams, players, meta, stats } = useSave();
-  const [view, setView] = useState<View>('standings');
+  const [picked, setView] = useState<View | null>(null);
+  const view: View = picked ?? (league.phase === 'playoffs' ? 'playoffs' : 'standings');
+  const VIEWS = [
+    { value: 'standings', label: 'Standings' },
+    { value: 'leaders', label: 'Leaders' },
+    ...(league.playoffs ? [{ value: 'playoffs', label: 'Playoffs' }] : [{ value: 'power', label: 'Power' }]),
+    { value: 'history', label: 'History' },
+  ] as { value: View; label: string }[];
   const [side, setSide] = useState<'bat' | 'pit'>('bat');
   const playerMap = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const teamMap = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
@@ -36,7 +40,11 @@ export function League() {
         <Segmented label="League view" options={VIEWS} value={view} onChange={setView} />
       </div>
 
-      {view === 'leaders' ? (
+      {view === 'playoffs' && league.playoffs ? (
+        <Bracket playoffs={league.playoffs} teams={teams} userTeamId={meta.userTeamId} />
+      ) : view === 'history' ? (
+        <HistoryList history={league.history ?? []} teams={teams} players={players} userTeamId={meta.userTeamId} />
+      ) : view === 'leaders' ? (
         <>
           <div className="mb-4 flex gap-2">
             {(['bat', 'pit'] as const).map((k) => (

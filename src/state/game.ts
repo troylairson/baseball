@@ -2,7 +2,7 @@ import * as Comlink from 'comlink';
 import { create } from 'zustand';
 import type { LoadedSave } from '../db/saves';
 import type { Player, Team } from '../engine';
-import type { SimMode, SimProgress } from '../worker/api';
+import type { ActionResult, SimMode, SimProgress } from '../worker/api';
 import { engine } from '../worker/client';
 
 const LAST_SAVE_KEY = 'dgm.lastSave';
@@ -16,6 +16,11 @@ interface GameState {
   close: () => void;
   simulate: (mode: SimMode) => Promise<void>;
   stopSim: () => void;
+  /** Run a front-office action; returns an error message if refused. */
+  act: (run: () => Promise<ActionResult>) => Promise<string | null>;
+  /** Short-lived feedback message shown as a toast. */
+  toast: string | null;
+  showToast: (message: string | null) => void;
 }
 
 export const useGame = create<GameState>((set, get) => ({
@@ -58,7 +63,21 @@ export const useGame = create<GameState>((set, get) => ({
   stopSim: () => {
     void engine().cancelSim();
   },
+  act: async (run) => {
+    const res = await run();
+    if (res.ok) {
+      set({ save: res.save });
+      return null;
+    }
+    set({ toast: res.reason });
+    return res.reason;
+  },
+  toast: null,
+  showToast: (toast) => set({ toast }),
 }));
+
+/** Typed access to the worker for actions: `act(() => api().setPlan(plan))`. */
+export const api = engine;
 
 export function lastSaveId(): string | null {
   try {

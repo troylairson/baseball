@@ -1,5 +1,8 @@
 import { avg, era, ipString, isPitcher, obp, ops, rate3, slg, whip, type Player, type PlayerSeasonStats } from '../../engine';
+import { useEffect, useState } from 'react';
 import { useGame } from '../../state/game';
+import { engine } from '../../worker/client';
+import { PlayerActions } from './PlayerActions';
 import { BottomSheet } from '../components/BottomSheet';
 import { RatingBadge, RatingBar } from '../components/Rating';
 import { TeamBadge } from '../components/TeamBadge';
@@ -49,7 +52,12 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
         </Summary>
       </div>
 
+      <div className="mt-4">
+        <PlayerActions player={player} />
+      </div>
+
       <SeasonStats player={player} stats={save.stats.find((s) => s.playerId === player.id)} season={save.league.season} />
+      <CareerStats player={player} />
 
       <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
         Scouting confidence: <strong className="text-ink">{accuracy >= 0.8 ? 'High' : accuracy >= 0.5 ? 'Medium' : 'Low'}</strong>. Shaded bands
@@ -114,6 +122,59 @@ function SeasonStats({ player, stats, season }: { player: Player; stats: PlayerS
           </div>
         ))}
       </dl>
+    </Section>
+  );
+}
+
+function CareerStats({ player }: { player: Player }) {
+  const [rows, setRows] = useState<{ id: number; data: PlayerSeasonStats[] } | null>(null);
+  const version = useGame((s) => s.save?.meta.updatedAt);
+  useEffect(() => {
+    let live = true;
+    engine().getCareerStats(player.id).then((data) => live && setRows({ id: player.id, data }));
+    return () => {
+      live = false;
+    };
+  }, [player.id, version]);
+  const data = rows?.id === player.id ? rows.data.filter((s) => (isPitcher(player) ? s.pit.g : s.bat.pa)) : [];
+  if (data.length < 2) return null;
+  const teams = useGame.getState().save!.teams;
+  const abbr = (id: number) => teams.find((t) => t.id === id)?.abbr ?? '—';
+  const th = 'pb-1.5 text-right font-medium';
+  return (
+    <Section title="Career">
+      <div className="-mx-4 overflow-x-auto px-4">
+        <table className="w-full min-w-[20rem] text-sm tabular-nums">
+          <thead>
+            <tr className="text-xs text-muted">
+              <th className="pb-1.5 text-left font-medium">Year</th>
+              {isPitcher(player) ? (
+                <><th className={th}>W-L</th><th className={th}>ERA</th><th className={th}>IP</th><th className={th}>SO</th><th className={th}>SV</th></>
+              ) : (
+                <><th className={th}>AVG</th><th className={th}>OPS</th><th className={th}>HR</th><th className={th}>RBI</th><th className={th}>SB</th></>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((s) => (
+              <tr key={s.season} className="border-t border-line">
+                <td className="py-1.5">{s.season} <span className="text-xs text-muted">{abbr(s.teamId)}</span></td>
+                {isPitcher(player) ? (
+                  <>
+                    <td className="text-right">{s.pit.w}-{s.pit.l}</td><td className="text-right">{era(s.pit).toFixed(2)}</td>
+                    <td className="text-right">{ipString(s.pit.outs)}</td><td className="text-right">{s.pit.so}</td><td className="text-right">{s.pit.sv}</td>
+                  </>
+                ) : (
+                  <>
+                    <td className="text-right">{rate3(avg(s.bat))}</td><td className="text-right">{rate3(ops(s.bat))}</td>
+                    <td className="text-right">{s.bat.hr}</td><td className="text-right">{s.bat.rbi}</td><td className="text-right">{s.bat.sb}</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Section>
   );
 }
