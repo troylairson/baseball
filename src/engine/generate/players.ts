@@ -100,7 +100,7 @@ function hands(position: Position, rng: Rng): { bats: BatSide; throws: Hand } {
   return { bats, throws };
 }
 
-export function generatePlayer(spec: PlayerSpec, rng: Rng): Player {
+export function generatePlayer(spec: PlayerSpec, rng: Rng, usedNames?: Set<string>): Player {
   const { position, talent, age } = spec;
   const pitcher = position === 'SP' || position === 'RP';
   const growth = growthForAge(age, rng);
@@ -117,10 +117,19 @@ export function generatePlayer(spec: PlayerSpec, rng: Rng): Player {
     }
   }
 
+  let firstName: string = rng.pick(FIRST_NAMES);
+  let lastName: string = rng.pick(LAST_NAMES);
+  // Avoid two players sharing a box-score name ("J. Smith") in the same league.
+  for (let tries = 0; usedNames?.has(`${firstName[0]}. ${lastName}`) && tries < 20; tries++) {
+    firstName = rng.pick(FIRST_NAMES);
+    lastName = rng.pick(LAST_NAMES);
+  }
+  usedNames?.add(`${firstName[0]}. ${lastName}`);
+
   return {
     id: spec.id,
-    firstName: rng.pick(FIRST_NAMES),
-    lastName: rng.pick(LAST_NAMES),
+    firstName,
+    lastName,
     age,
     ...hands(position, rng),
     position,
@@ -144,6 +153,7 @@ export function generatePlayer(spec: PlayerSpec, rng: Rng): Player {
     level: spec.level,
     contract: null,
     scoutSeed: rng.nextUint32(),
+    fatigue: 0,
   };
 }
 

@@ -14,6 +14,7 @@ export function DivisionStandings({ division, teams, userTeamId }: { division: D
           <th className="w-10 pb-2 text-right font-medium">L</th>
           <th className="w-14 pb-2 text-right font-medium">PCT</th>
           <th className="w-10 pb-2 text-right font-medium">GB</th>
+          <th className="hidden w-12 pb-2 text-right font-medium sm:table-cell">DIFF</th>
         </tr>
       </thead>
       <tbody>
@@ -29,6 +30,9 @@ export function DivisionStandings({ division, teams, userTeamId }: { division: D
             <td className="text-right">{t.losses}</td>
             <td className="text-right">{winPct(t).toFixed(3).replace(/^0/, '')}</td>
             <td className="text-right">{leader ? gamesBack(leader, t) : '—'}</td>
+            <td className={`hidden text-right sm:table-cell ${t.runsScored - t.runsAllowed > 0 ? 'text-accent' : t.runsScored - t.runsAllowed < 0 ? 'text-danger' : ''}`}>
+              {t.runsScored - t.runsAllowed > 0 ? '+' : ''}{t.runsScored - t.runsAllowed}
+            </td>
           </tr>
         ))}
       </tbody>

@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
-import { overall, type Player } from '../../engine';
+import { autoPlan, avg, isPitcher, overall, pickStarter, rate3, type Player } from '../../engine';
 import { useSave, useUserTeam } from '../../state/game';
 import { Card } from '../components/Card';
 import { Icon, type IconName } from '../components/Icon';
 import { RatingBadge } from '../components/Rating';
 import { DivisionStandings } from '../components/Standings';
 import { TeamBadge } from '../components/TeamBadge';
-import { fullName, money } from '../format';
-import { useOpenPlayer } from '../hooks';
+import { GameRow } from '../components/GameRow';
+import { fullName, money, shortName } from '../format';
+import { useOpenGame, useOpenPlayer } from '../hooks';
 import { scoutedOverall } from '../scouting';
 import { payroll, payrollBudget, teamOverall } from '../teams';
 
@@ -27,6 +28,12 @@ export function Home() {
     .sort((a, b) => overall(b, true) - overall(a, true))[0];
   const expiring = org.filter((p) => p.level === 'MLB' && p.contract?.years === 1);
   const division = league.divisions.find((d) => d.id === team.divisionId)!;
+  const statsById = new Map(save.stats.map((s) => [s.playerId, s]));
+  const slumping = org
+    .filter((p) => p.level === 'MLB' && !isPitcher(p))
+    .map((player) => ({ player, stats: statsById.get(player.id)! }))
+    .filter(({ stats }) => stats && stats.bat.pa >= 60 && avg(stats.bat) < 0.2)
+    .sort((a, b) => avg(a.stats.bat) - avg(b.stats.bat))[0];
 
   const expectation = rank <= teams.length / 4 ? 'Win the division' : rank <= teams.length / 2 ? 'Contend for a playoff spot' : rank <= (teams.length * 3) / 4 ? 'Finish above .500' : 'Rebuild and develop youth';
 
@@ -52,7 +59,17 @@ export function Home() {
 
       <Card title="To do" className="md:row-span-2">
         <ul className="-mx-2 flex flex-col">
-          <Todo icon="roster" to="/play/roster" title="Review your roster" detail="Get to know your players before Opening Day." />
+          {league.phase === 'preseason' && (
+            <Todo icon="roster" to="/play/roster" title="Review your roster" detail="Get to know your players before Opening Day." />
+          )}
+          {slumping && (
+            <Todo
+              icon="alert"
+              onClick={() => openPlayer(slumping.player.id)}
+              title={`${fullName(slumping.player)} is struggling`}
+              detail={`Hitting ${rate3(avg(slumping.stats.bat))} in ${slumping.stats.bat.pa} plate appearances.`}
+            />
+          )}
           {topProspect && (
             <Todo
               icon="search"
@@ -78,10 +95,7 @@ export function Home() {
         </div>
       </Card>
 
-      <Card title="Next game">
-        <p className="font-medium">Opening Day</p>
-        <p className="text-sm text-muted">The schedule and game simulation arrive in the next build.</p>
-      </Card>
+      <GamesCard />
 
       <Card title="Division" className="md:col-span-2">
         <DivisionStandings division={division} teams={teams} userTeamId={team.id} />
@@ -101,6 +115,57 @@ export function Home() {
         </ul>
       </Card>
     </div>
+  );
+}
+
+function GamesCard() {
+  const { schedule, teams, players, league } = useSave();
+  const team = useUserTeam();
+  const openGame = useOpenGame();
+  const openPlayer = useOpenPlayer();
+  const teamMap = new Map(teams.map((t) => [t.id, t]));
+  const mine = schedule.filter((g) => g.homeId === team.id || g.awayId === team.id);
+  const last = mine.filter((g) => g.played).at(-1);
+  const next = mine.find((g) => !g.played);
+
+  // Probable starters: the next rested arm in each rotation.
+  const probable = (teamId: number) => {
+    const t = teamMap.get(teamId)!;
+    const roster = players.filter((p) => p.teamId === teamId && p.level === 'MLB');
+    const plan = autoPlan(roster, league.settings.designatedHitter);
+    const id = pickStarter({ ...t }, plan, new Map(roster.map((p) => [p.id, p])), false);
+    return players.find((p) => p.id === id);
+  };
+
+  return (
+    <Card title={next ? (league.phase === 'preseason' ? 'Opening Day' : 'Next game') : 'Season'}>
+      {next ? (
+        <>
+          <GameRow game={next} teamId={team.id} teams={teamMap} />
+          <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+            {[team.id, next.homeId === team.id ? next.awayId : next.homeId].map((id) => {
+              const sp = probable(id);
+              return (
+                <button key={id} onClick={() => sp && openPlayer(sp.id)} className="rounded-xl bg-surface-2 px-3 py-2 text-left">
+                  <span className="block text-[11px] uppercase tracking-wide text-muted">{teamMap.get(id)!.abbr} starter</span>
+                  <span className="block truncate font-medium">{sp ? shortName(sp) : 'TBD'}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-muted">The regular season is complete. Playoffs and the offseason arrive next.</p>
+      )}
+      {last && (
+        <div className="mt-3 border-t border-line pt-2">
+          <p className="px-2 text-[11px] uppercase tracking-wide text-muted">Last game</p>
+          <div className="-mx-2">
+            <GameRow game={last} teamId={team.id} teams={teamMap} onOpen={openGame} />
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 

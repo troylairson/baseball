@@ -1,6 +1,12 @@
 export * from './rng';
 export * from './model/types';
 export * from './model/ratings';
+export * from './model/stats';
 export * from './scouting';
 export { generateLeague, DEFAULT_SETTINGS, START_SEASON } from './generate/league';
 export type { GeneratedLeague } from './generate/league';
+export { generateSchedule, openingDay, addDays } from './season/schedule';
+export * from './season/season';
+export { autoPlan, defenseAt } from './sim/lineup';
+export type { GamePlan, LineupSlot } from './sim/lineup';
+export type { GameResult, TeamBox, BoxBatter, BoxPitcher } from './sim/game';

@@ -7,6 +7,8 @@ import { formatDate } from '../format';
 import { PlayerSheet } from '../screens/PlayerSheet';
 import { SettingsSheet } from '../screens/SettingsSheet';
 import { NAV_ITEMS } from './nav';
+import { SimButton, SimProgressBar } from './SimControls';
+import { BoxScoreSheet } from '../screens/BoxScoreSheet';
 
 export function AppShell() {
   const save = useGame((s) => s.save);
@@ -18,13 +20,16 @@ function Shell() {
   const [params, setParams] = useSearchParams();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const playerId = Number(params.get('p')) || null;
-  const closePlayer = useCallback(() => {
+  const gameId = Number(params.get('g')) || null;
+  const closeParam = useCallback((key: string) => {
     setParams((prev) => {
       const next = new URLSearchParams(prev);
-      next.delete('p');
+      next.delete(key);
       return next;
     });
   }, [setParams]);
+  const closePlayer = useCallback(() => closeParam('p'), [closeParam]);
+  const closeGame = useCallback(() => closeParam('g'), [closeParam]);
 
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[15rem_1fr]">
@@ -36,6 +41,7 @@ function Shell() {
         </main>
       </div>
       <BottomNav />
+      <BoxScoreSheet gameId={gameId} onClose={closeGame} />
       <PlayerSheet playerId={playerId} onClose={closePlayer} />
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
@@ -45,6 +51,7 @@ function Shell() {
 function TopBar({ onSettings }: { onSettings: () => void }) {
   const team = useUserTeam();
   const league = useGame((s) => s.save!.league);
+  const seasonDone = useGame((s) => s.save!.schedule.every((g) => g.played));
   return (
     <header className="pt-safe sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 md:px-8">
@@ -53,25 +60,21 @@ function TopBar({ onSettings }: { onSettings: () => void }) {
           <div className="truncate text-sm font-semibold">
             {team.name} <span className="font-normal text-muted tabular-nums">· {team.wins}–{team.losses}</span>
           </div>
-          <div className="text-xs text-muted">{formatDate(league.date)} · {phaseLabel(league.phase)}</div>
+          <div className="truncate text-xs text-muted">{formatDate(league.date)} · {phaseLabel(league.phase, seasonDone)}</div>
         </div>
         <button onClick={onSettings} className="grid size-10 place-items-center rounded-full text-muted hover:bg-surface-2 md:hidden" aria-label="Settings">
           <Icon name="settings" />
         </button>
-        <button
-          disabled
-          title="Simulation arrives in the next phase"
-          className="flex h-10 items-center gap-1.5 rounded-full bg-accent px-4 text-sm font-semibold text-accent-contrast disabled:opacity-50"
-        >
-          <Icon name="play" className="size-4" /> Sim
-        </button>
+        <SimButton />
       </div>
+      <SimProgressBar />
     </header>
   );
 }
 
-function phaseLabel(phase: string): string {
-  return { preseason: 'Preseason', regular: 'Regular Season', playoffs: 'Playoffs', offseason: 'Offseason' }[phase] ?? phase;
+function phaseLabel(phase: string, seasonDone: boolean): string {
+  if (phase === 'regular' && seasonDone) return 'Season complete';
+  return { preseason: 'Preseason', regular: 'Season', playoffs: 'Playoffs', offseason: 'Offseason' }[phase] ?? phase;
 }
 
 function Sidebar({ onSettings }: { onSettings: () => void }) {

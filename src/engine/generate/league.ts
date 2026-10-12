@@ -87,20 +87,25 @@ export function generateLeague(seed: number | string, settings: LeagueSettings =
       market: rng.int(1, 5),
       wins: 0,
       losses: 0,
+      runsScored: 0,
+      runsAllowed: 0,
+      rotationSlot: 0,
     };
   });
   dedupeAbbreviations(teams);
 
   const players: Player[] = [];
+  const usedNames = new Set<string>();
   let nextId = 1;
   for (const team of teams) {
     const teamRng = rng.fork(`team-${team.id}`);
-    const teamOffset = teamRng.normal(0, 2.5);
+    const teamOffset = teamRng.normal(0, 1);
     MLB_ROSTER.forEach((position, i) => {
       const age = Math.round(Math.min(38, Math.max(22, teamRng.normal(28.5, 3.5))));
       players.push(generatePlayer(
         { id: nextId++, position, talent: mlbTalent(i, teamOffset, teamRng), age, teamId: team.id, level: 'MLB' },
         teamRng,
+        usedNames,
       ));
     });
     AAA_ROSTER.forEach((position) => {
@@ -110,6 +115,7 @@ export function generateLeague(seed: number | string, settings: LeagueSettings =
       players.push(generatePlayer(
         { id: nextId++, position, talent, age, teamId: team.id, level: 'AAA' },
         teamRng,
+        usedNames,
       ));
     });
   }

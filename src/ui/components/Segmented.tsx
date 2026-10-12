@@ -9,8 +9,8 @@ export function Segmented<T extends string>({
           role="tab"
           aria-selected={o.value === value}
           onClick={() => onChange(o.value)}
-          className={`min-h-9 flex-1 rounded-lg px-3 text-sm font-medium transition-colors ${
-            o.value === value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'
+          className={`min-h-9 flex-1 rounded-lg px-3 text-sm font-medium ${
+            o.value === value ? 'bg-surface text-ink shadow-sm dark:bg-line' : 'text-muted hover:text-ink'
           }`}
         >
           {o.label}

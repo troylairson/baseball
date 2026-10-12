@@ -28,6 +28,11 @@ describe('generateLeague', () => {
     }
   });
 
+  it('avoids duplicate box-score names', () => {
+    const names = players.map((p) => `${p.firstName[0]}. ${p.lastName}`);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
   it('assigns unique ids and contracts to all players', () => {
     expect(new Set(players.map((p) => p.id)).size).toBe(players.length);
     expect(players.every((p) => p.contract && p.contract.salary >= 760)).toBe(true);

@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSave } from '../../state/game';
 import { Card, PageHeader } from '../components/Card';
+import { LeaderBoard } from '../components/Leaders';
+import { BATTING_LEADERS, PITCHING_LEADERS } from '../stats';
 import { RatingBadge } from '../components/Rating';
 import { Segmented } from '../components/Segmented';
 import { DivisionStandings } from '../components/Standings';
@@ -8,15 +10,20 @@ import { TeamBadge } from '../components/TeamBadge';
 import { money } from '../format';
 import { payroll, teamOverall } from '../teams';
 
-type View = 'standings' | 'power';
+type View = 'standings' | 'leaders' | 'power';
 const VIEWS = [
   { value: 'standings', label: 'Standings' },
-  { value: 'power', label: 'Power Rankings' },
+  { value: 'leaders', label: 'Leaders' },
+  { value: 'power', label: 'Power' },
 ] as const;
 
 export function League() {
-  const { league, teams, players, meta } = useSave();
+  const { league, teams, players, meta, stats } = useSave();
   const [view, setView] = useState<View>('standings');
+  const [side, setSide] = useState<'bat' | 'pit'>('bat');
+  const playerMap = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+  const teamMap = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
+  const teamGames = Math.max(...teams.map((t) => t.wins + t.losses));
 
   const ranked = teams
     .map((t) => ({ team: t, ovr: teamOverall(players, t.id), pay: payroll(players, t.id) }))
@@ -29,7 +36,26 @@ export function League() {
         <Segmented label="League view" options={VIEWS} value={view} onChange={setView} />
       </div>
 
-      {view === 'standings' ? (
+      {view === 'leaders' ? (
+        <>
+          <div className="mb-4 flex gap-2">
+            {(['bat', 'pit'] as const).map((k) => (
+              <button
+                key={k}
+                onClick={() => setSide(k)}
+                className={`h-9 rounded-full px-4 text-sm font-medium ${side === k ? 'bg-ink text-bg' : 'bg-surface-2 text-muted'}`}
+              >
+                {k === 'bat' ? 'Batting' : 'Pitching'}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {(side === 'bat' ? BATTING_LEADERS : PITCHING_LEADERS).map((l) => (
+              <LeaderBoard key={l.key} leader={l} stats={stats} players={playerMap} teams={teamMap} teamGames={teamGames} />
+            ))}
+          </div>
+        </>
+      ) : view === 'standings' ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {league.divisions.map((d) => (
             <Card key={d.id}>
@@ -52,7 +78,7 @@ export function League() {
               </li>
             ))}
           </ol>
-          <p className="mt-3 text-xs text-muted">Pre-season rankings by average roster rating.</p>
+          <p className="mt-3 text-xs text-muted">Ranked by average roster rating.</p>
         </Card>
       )}
     </>

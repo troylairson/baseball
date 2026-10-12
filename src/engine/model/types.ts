@@ -67,6 +67,8 @@ export interface Player {
   contract: Contract | null;
   /** Per-player seed used to produce stable scouting noise. */
   scoutSeed: number;
+  /** Accumulated pitching workload (0 = fully rested). Recovers daily. */
+  fatigue: number;
 }
 
 export interface Team {
@@ -82,6 +84,10 @@ export interface Team {
   market: number;
   wins: number;
   losses: number;
+  runsScored: number;
+  runsAllowed: number;
+  /** Index into the rotation of the pitcher due to start next. */
+  rotationSlot: number;
 }
 
 export interface Division {
@@ -105,6 +111,17 @@ export interface LeagueSettings {
   divisionsPerConference: number;
   gamesPerSeason: number;
   designatedHitter: boolean;
+}
+
+export interface ScheduledGame {
+  id: number;
+  date: string;
+  homeId: number;
+  awayId: number;
+  played: boolean;
+  homeScore: number | null;
+  awayScore: number | null;
+  innings: number | null;
 }
 
 export interface League {

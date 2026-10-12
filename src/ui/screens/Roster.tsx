@@ -6,6 +6,7 @@ import { PlayerCard } from '../components/PlayerCard';
 import { Segmented } from '../components/Segmented';
 import { byPosition, money } from '../format';
 import { useOpenPlayer } from '../hooks';
+import { statSummary, useStatsMap } from '../stats';
 import { payroll } from '../teams';
 
 type View = 'hitters' | 'pitchers' | 'aaa';
@@ -20,6 +21,7 @@ export function Roster() {
   const team = useUserTeam();
   const openPlayer = useOpenPlayer();
   const [view, setView] = useState<View>('hitters');
+  const stats = useStatsMap();
 
   const org = players.filter((p) => p.teamId === team.id);
   const mlb = org.filter((p) => p.level === 'MLB');
@@ -47,13 +49,13 @@ export function Roster() {
           <Card key={title} title={`${title} (${list.length})`} className="px-2 sm:px-4">
             <div className="-mx-0 flex flex-col">
               {list.map((p) => (
-                <PlayerCard key={p.id} player={p} userTeamId={team.id} onOpen={openPlayer} />
+                <PlayerCard key={p.id} player={p} userTeamId={team.id} onOpen={openPlayer} statLine={statSummary(p, stats.get(p.id))} />
               ))}
             </div>
           </Card>
         ))}
       </div>
-      <p className="mt-4 text-center text-xs text-muted">Lineups, depth charts and call-ups arrive with game simulation.</p>
+      <p className="mt-4 text-center text-xs text-muted">Lineups and the pitching staff are set automatically. Manual control arrives next.</p>
     </>
   );
 }

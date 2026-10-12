@@ -1,4 +1,4 @@
-import { isPitcher, type Player } from '../../engine';
+import { avg, era, ipString, isPitcher, obp, ops, rate3, slg, whip, type Player, type PlayerSeasonStats } from '../../engine';
 import { useGame } from '../../state/game';
 import { BottomSheet } from '../components/BottomSheet';
 import { RatingBadge, RatingBar } from '../components/Rating';
@@ -49,6 +49,8 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
         </Summary>
       </div>
 
+      <SeasonStats player={player} stats={save.stats.find((s) => s.playerId === player.id)} season={save.league.season} />
+
       <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
         Scouting confidence: <strong className="text-ink">{accuracy >= 0.8 ? 'High' : accuracy >= 0.5 ? 'Medium' : 'Low'}</strong>. Shaded bands
         show the range the true rating likely falls in; markers show projected potential.
@@ -83,6 +85,36 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
         {bar('Greed', 'greed', player.personality.greed)}
       </Section>
     </div>
+  );
+}
+
+function SeasonStats({ player, stats, season }: { player: Player; stats: PlayerSeasonStats | undefined; season: number }) {
+  if (!stats) return null;
+  const cells: [string, string | number][] = isPitcher(player)
+    ? stats.pit.g === 0
+      ? []
+      : [
+          ['W-L', `${stats.pit.w}-${stats.pit.l}`], ['ERA', era(stats.pit).toFixed(2)], ['G', stats.pit.g], ['SV', stats.pit.sv],
+          ['IP', ipString(stats.pit.outs)], ['SO', stats.pit.so], ['BB', stats.pit.bb], ['WHIP', whip(stats.pit).toFixed(2)],
+        ]
+    : stats.bat.pa === 0
+      ? []
+      : [
+          ['AVG', rate3(avg(stats.bat))], ['OBP', rate3(obp(stats.bat))], ['SLG', rate3(slg(stats.bat))], ['OPS', rate3(ops(stats.bat))],
+          ['HR', stats.bat.hr], ['RBI', stats.bat.rbi], ['R', stats.bat.r], ['SB', stats.bat.sb],
+        ];
+  if (cells.length === 0) return null;
+  return (
+    <Section title={`${season} season`}>
+      <dl className="grid grid-cols-4 gap-2">
+        {cells.map(([label, value]) => (
+          <div key={label} className="rounded-xl bg-surface-2 py-2 text-center">
+            <dt className="text-[10px] font-medium uppercase tracking-wide text-muted">{label}</dt>
+            <dd className="font-semibold tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Section>
   );
 }
 

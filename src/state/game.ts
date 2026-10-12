@@ -1,6 +1,8 @@
+import * as Comlink from 'comlink';
 import { create } from 'zustand';
 import type { LoadedSave } from '../db/saves';
 import type { Player, Team } from '../engine';
+import type { SimMode, SimProgress } from '../worker/api';
 import { engine } from '../worker/client';
 
 const LAST_SAVE_KEY = 'dgm.lastSave';
@@ -8,13 +10,18 @@ const LAST_SAVE_KEY = 'dgm.lastSave';
 interface GameState {
   save: LoadedSave | null;
   loading: boolean;
+  /** Set while a simulation is running. */
+  sim: { mode: SimMode; progress: SimProgress | null } | null;
   load: (saveId: string) => Promise<boolean>;
   close: () => void;
+  simulate: (mode: SimMode) => Promise<void>;
+  stopSim: () => void;
 }
 
-export const useGame = create<GameState>((set) => ({
+export const useGame = create<GameState>((set, get) => ({
   save: null,
   loading: false,
+  sim: null,
   load: async (saveId) => {
     set({ loading: true });
     const save = await engine().loadSave(saveId);
@@ -34,6 +41,22 @@ export const useGame = create<GameState>((set) => ({
       // Ignore.
     }
     set({ save: null });
+  },
+  simulate: async (mode) => {
+    if (get().sim) return;
+    set({ sim: { mode, progress: null } });
+    try {
+      const save = await engine().sim(
+        mode,
+        Comlink.proxy((progress: SimProgress) => set({ sim: { mode, progress } })),
+      );
+      set({ save });
+    } finally {
+      set({ sim: null });
+    }
+  },
+  stopSim: () => {
+    void engine().cancelSim();
   },
 }));
 

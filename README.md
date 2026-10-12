@@ -21,8 +21,10 @@ npm run dev        # http://localhost:5173
 
 ```
 src/
-  engine/   Pure TypeScript game logic (no DOM): seeded RNG, data model,
-            ratings, scouting, league/player generation. Runs in a Web Worker.
+  engine/   Pure TypeScript game logic (no DOM). Runs in a Web Worker.
+    generate/  league, team and player generation
+    sim/       plate appearance model, lineups, single-game simulation
+    season/    schedule and day-by-day season simulation
   worker/   Comlink API the UI calls into (engine.worker.ts / client.ts).
   db/       IndexedDB persistence via Dexie (one record set per save).
   state/    Zustand stores: loaded save, theme.
@@ -36,4 +38,6 @@ src/
 
 ## Status
 
-Phase 0 (foundation) is complete: app shell, league generation, save/load, roster, player sheets, standings and finances overview. Next up is Phase 1: the game engine, schedule and sim controls.
+- **Phase 0 — Foundation:** done. App shell, league generation, save/load, roster, player sheets, standings, finances overview.
+- **Phase 1 — Core sim:** done. Plate-appearance game engine (log5 batter/pitcher matchups, platoon splits, baserunning, steals, double plays, errors, pitcher fatigue and bullpen management, W/L/S decisions), balanced 162-game schedule, season simulation in the worker, box scores with play-by-play, league scores, stat leaders and player season stats. A calibration test keeps league totals MLB-like (≈4.4 R/G, .245 AVG, 22–23% K, ≈4.3 ERA); a full season sims in well under a second.
+- **Next — Phase 2:** manual lineups and depth charts, playoffs, and the offseason loop (progression, retirements, free agency, draft).

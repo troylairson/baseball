@@ -4,7 +4,9 @@ import { scouted, scoutedOverall } from '../scouting';
 import { RatingBadge } from './Rating';
 
 /** Compact, tappable player row used in rosters and lists. */
-export function PlayerCard({ player, userTeamId, onOpen }: { player: Player; userTeamId: number; onOpen: (id: number) => void }) {
+export function PlayerCard({
+  player, userTeamId, onOpen, statLine,
+}: { player: Player; userTeamId: number; onOpen: (id: number) => void; statLine?: string | null }) {
   const { ovr, pot } = scoutedOverall(player, userTeamId);
   const keys = isPitcher(player)
     ? [['STF', player.pitching!.stuff], ['CTL', player.pitching!.control], ['MOV', player.pitching!.movement]] as const
@@ -18,8 +20,8 @@ export function PlayerCard({ player, userTeamId, onOpen }: { player: Player; use
       <span className="w-8 shrink-0 text-center text-xs font-bold text-muted">{player.position}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{fullName(player)}</span>
-        <span className="block text-xs text-muted tabular-nums">
-          Age {player.age} · {player.bats}/{player.throws} · {money(player.contract?.salary ?? 0)}
+        <span className="block truncate text-xs text-muted tabular-nums">
+          {statLine ?? `Age ${player.age} · ${player.bats}/${player.throws} · ${money(player.contract?.salary ?? 0)}`}
         </span>
       </span>
       <span className="hidden gap-1.5 sm:flex">

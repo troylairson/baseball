@@ -1,16 +1,23 @@
-import type { GeneratedLeague, League, Player, Team } from '../engine';
-import type { GameDB, SaveMeta } from './db';
+import {
+  generateSchedule, Rng, type GeneratedLeague, type League, type Player, type PlayerSeasonStats, type ScheduledGame, type Team,
+} from '../engine';
+import type { BoxScore, GameDB, SaveMeta } from './db';
 
 export interface LoadedSave {
   meta: SaveMeta;
   league: League;
   teams: Team[];
   players: Player[];
+  schedule: ScheduledGame[];
+  /** Current-season stats. */
+  stats: PlayerSeasonStats[];
 }
 
 function strip<T extends { saveId: string }>({ saveId: _saveId, ...rest }: T): Omit<T, 'saveId'> {
   return rest;
 }
+
+const tag = <T>(saveId: string) => (row: T) => ({ ...row, saveId });
 
 export async function createSave(
   db: GameDB,
@@ -29,12 +36,15 @@ export async function createSave(
     createdAt: now,
     updatedAt: now,
   };
+  const { league, teams, players } = generated;
+  const schedule = generateSchedule(teams, league.settings.gamesPerSeason, league.season, new Rng(`${opts.seed}-schedule-${league.season}`));
   const saveId = meta.id;
-  await db.transaction('rw', [db.saves, db.leagues, db.teams, db.players], async () => {
+  await db.transaction('rw', [db.saves, ...db.saveTables], async () => {
     await db.saves.add(meta);
-    await db.leagues.add({ ...generated.league, saveId });
-    await db.teams.bulkAdd(generated.teams.map((t) => ({ ...t, saveId })));
-    await db.players.bulkAdd(generated.players.map((p) => ({ ...p, saveId })));
+    await db.leagues.add({ ...league, saveId });
+    await db.teams.bulkAdd(teams.map(tag(saveId)));
+    await db.players.bulkAdd(players.map(tag(saveId)));
+    await db.games.bulkAdd(schedule.map(tag(saveId)));
   });
   return meta;
 }
@@ -46,25 +56,67 @@ export function listSaves(db: GameDB): Promise<SaveMeta[]> {
 export async function loadSave(db: GameDB, saveId: string): Promise<LoadedSave | null> {
   const meta = await db.saves.get(saveId);
   if (!meta) return null;
-  const [league, teams, players] = await Promise.all([
+  const [league, teams, players, games] = await Promise.all([
     db.leagues.get(saveId),
     db.teams.where('saveId').equals(saveId).toArray(),
     db.players.where('saveId').equals(saveId).toArray(),
+    db.games.where('saveId').equals(saveId).toArray(),
   ]);
   if (!league) return null;
+  const stats = await db.stats.where('[saveId+season]').equals([saveId, league.season]).toArray();
+
+  // Saves from before the season engine existed: fill new fields and build a schedule.
+  for (const t of teams) {
+    t.runsScored ??= 0;
+    t.runsAllowed ??= 0;
+    t.rotationSlot ??= 0;
+  }
+  for (const p of players) p.fatigue ??= 0;
+  let schedule = games.map(strip).sort((a, b) => a.id - b.id);
+  if (schedule.length === 0) {
+    schedule = generateSchedule(teams, league.settings.gamesPerSeason, league.season, new Rng(`${meta.seed}-schedule-${league.season}`));
+    await db.games.bulkAdd(schedule.map(tag(saveId)));
+  }
+
   return {
     meta,
     league: strip(league),
     teams: teams.map(strip).sort((a, b) => a.id - b.id),
     players: players.map(strip).sort((a, b) => a.id - b.id),
+    schedule,
+    stats: stats.map(strip),
   };
 }
 
+/** Write back everything a stretch of simulation can change. */
+export async function persistProgress(
+  db: GameDB,
+  save: LoadedSave,
+  changedGames: ScheduledGame[],
+  boxScores: BoxScore[],
+): Promise<void> {
+  const saveId = save.meta.id;
+  save.meta.updatedAt = Date.now();
+  save.meta.season = save.league.season;
+  await db.transaction('rw', [db.saves, ...db.saveTables], async () => {
+    await db.saves.put(save.meta);
+    await db.leagues.put({ ...save.league, saveId });
+    await db.teams.bulkPut(save.teams.map(tag(saveId)));
+    await db.players.bulkPut(save.players.map(tag(saveId)));
+    await db.stats.bulkPut(save.stats.map(tag(saveId)));
+    await db.games.bulkPut(changedGames.map(tag(saveId)));
+    await db.boxScores.bulkPut(boxScores.map(tag(saveId)));
+  });
+}
+
+export async function loadBoxScore(db: GameDB, saveId: string, gameId: number): Promise<BoxScore | null> {
+  const row = await db.boxScores.get([saveId, gameId]);
+  return row ? strip(row) : null;
+}
+
 export async function deleteSave(db: GameDB, saveId: string): Promise<void> {
-  await db.transaction('rw', [db.saves, db.leagues, db.teams, db.players], async () => {
+  await db.transaction('rw', [db.saves, ...db.saveTables], async () => {
     await db.saves.delete(saveId);
-    await db.leagues.delete(saveId);
-    await db.teams.where('saveId').equals(saveId).delete();
-    await db.players.where('saveId').equals(saveId).delete();
+    for (const table of db.saveTables) await table.where('saveId').equals(saveId).delete();
   });
 }
