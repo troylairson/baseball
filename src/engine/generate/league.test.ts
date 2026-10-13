@@ -35,7 +35,17 @@ describe('generateLeague', () => {
 
   it('assigns unique ids and contracts to all players', () => {
     expect(new Set(players.map((p) => p.id)).size).toBe(players.length);
-    expect(players.every((p) => p.contract && p.contract.salary >= 760)).toBe(true);
+    expect(players.filter((p) => p.teamId !== null).every((p) => p.contract && p.contract.salary >= 760)).toBe(true);
+    expect(players.filter((p) => p.teamId === null).every((p) => p.demand && !p.contract)).toBe(true);
+  });
+
+  it('stocks a free agent market across positions', () => {
+    const fa = players.filter((p) => p.teamId === null);
+    expect(fa.length).toBe(teams.length * 4);
+    expect(new Set(fa.map((p) => p.position)).size).toBeGreaterThanOrEqual(8);
+    expect(fa.some((p) => overall(p) >= 48)).toBe(true);
+    // Spring: unsigned players take one-year deals.
+    expect(fa.every((p) => p.demand!.years === 1)).toBe(true);
   });
 
   it('keeps ratings on the 20–80 scale with MLB average near 50', () => {

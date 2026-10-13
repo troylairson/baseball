@@ -1,6 +1,6 @@
 import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
-  acceptOffer, applyTrendAction, type TrendAction, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  acceptOffer, applyTrendAction, exportRoster, leagueFromRoster, mlbPackToRoster, parseRosterFile, type MlbPack, type TrendAction, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
   type SeasonState, type TeamStrategy, type TradeProposal, type AdviceAction, type GameResult, type LiveCommand, type LiveSituation,
 } from '../engine';
@@ -36,6 +36,8 @@ export interface SimProgress {
 }
 
 /** Result of a front-office action: the new snapshot, or why it was refused. */
+export type LeagueSource = { kind: 'fictional' } | { kind: 'mlb'; json: string } | { kind: 'file'; json: string };
+
 export type ActionResult = { ok: true; save: LoadedSave; message?: string } | { ok: false; reason: string };
 
 const yieldToEvents = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -123,9 +125,20 @@ export function createEngineApi(db = new GameDB()) {
 
   return {
     /** Generate a fresh league and return team summaries for team selection. */
-    async previewLeague(settings: LeagueSettings = DEFAULT_SETTINGS, seed?: number): Promise<TeamPreview[]> {
+    /**
+     * Build a league to pick a team from. `source` is a fictional league
+     * (default), the bundled MLB pack's JSON text, or a roster file's JSON text.
+     */
+    async previewLeague(settings: LeagueSettings = DEFAULT_SETTINGS, seed?: number, source?: LeagueSource): Promise<TeamPreview[]> {
       const s = seed ?? Math.floor(Math.random() * 2 ** 32);
-      const generated = generateLeague(s, settings);
+      let generated: GeneratedLeague;
+      if (source && source.kind !== 'fictional') {
+        const parsed: unknown = JSON.parse(source.json);
+        const file = source.kind === 'mlb' ? mlbPackToRoster(parsed as MlbPack) : parseRosterFile(parsed);
+        generated = leagueFromRoster(file, s, settings);
+      } else {
+        generated = generateLeague(s, settings);
+      }
       pending = { seed: s, generated };
       return generated.teams.map((team) => {
         const roster = generated.players.filter((p) => p.teamId === team.id && p.level === 'MLB');
@@ -150,6 +163,13 @@ export function createEngineApi(db = new GameDB()) {
       const meta = await createSave(db, pending.generated, { userTeamId, seed: pending.seed });
       pending = null;
       return meta.id;
+    },
+
+    /** The current league's teams and players as a shareable roster file (JSON text). */
+    async exportRosters(): Promise<string | null> {
+      if (!session) return null;
+      const { state } = current();
+      return JSON.stringify(exportRoster(state));
     },
 
     listSaves: () => listSaves(db),

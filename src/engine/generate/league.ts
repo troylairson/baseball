@@ -2,6 +2,7 @@ import { overall } from '../model/ratings';
 import type { Conference, Division, League, LeagueSettings, Player, Position, Team } from '../model/types';
 import { Rng } from '../rng';
 import { FRANCHISES, TEAM_COLORS } from './names';
+import { topUpFreeAgents, softenDemands } from './freeAgents';
 import { estimateSalary, generatePlayer } from './players';
 
 export const DEFAULT_SETTINGS: LeagueSettings = {
@@ -135,12 +136,16 @@ export function generateLeague(seed: number | string, settings: LeagueSettings =
   }
 
   for (const player of players) {
+    if (player.teamId === null) continue;
     const ovr = overall(player);
     player.contract = {
       salary: estimateSalary(ovr, player.age, rng),
       years: player.age < 26 ? rng.int(1, 3) : rng.int(1, Math.max(1, Math.min(6, 36 - player.age))),
     };
   }
+  topUpFreeAgents(players, teams.length, rng.fork('free-agents'));
+  softenDemands(players);
+
   // Owners fund at least the payroll they inherit, plus a little room.
   for (const team of teams) {
     const payroll = players.filter((p) => p.teamId === team.id).reduce((s, p) => s + p.contract!.salary, 0);

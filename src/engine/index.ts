@@ -30,3 +30,6 @@ export * from './season/finance';
 export * from './season/legacy';
 export * from './season/gamelog';
 export * from './season/trends';
+export * from './generate/freeAgents';
+export * from './generate/rosterFile';
+export * from './generate/mlb';

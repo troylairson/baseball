@@ -28,7 +28,7 @@ const SECONDARY: Record<FieldPosition, [FieldPosition, number][]> = {
 };
 
 /** How many points of growth remain, on average, at a given age. */
-function growthForAge(age: number, rng: Rng): number {
+export function growthForAge(age: number, rng: Rng): number {
   if (age <= 20) return rng.normal(13, 4);
   if (age <= 22) return rng.normal(9, 3.5);
   if (age <= 24) return rng.normal(5, 2.5);
@@ -75,7 +75,7 @@ function pitching(talent: number, starter: boolean, rng: Rng): PitchingRatings {
   };
 }
 
-function growBatting(b: BattingRatings, growth: number, rng: Rng): BattingRatings {
+export function growBatting(b: BattingRatings, growth: number, rng: Rng): BattingRatings {
   return {
     contact: grow(b.contact, growth, rng),
     power: grow(b.power, growth * 1.1, rng),
@@ -84,7 +84,7 @@ function growBatting(b: BattingRatings, growth: number, rng: Rng): BattingRating
   };
 }
 
-function growPitching(p: PitchingRatings, growth: number, rng: Rng): PitchingRatings {
+export function growPitching(p: PitchingRatings, growth: number, rng: Rng): PitchingRatings {
   return {
     stuff: grow(p.stuff, growth, rng),
     control: grow(p.control, growth, rng),
@@ -93,7 +93,7 @@ function growPitching(p: PitchingRatings, growth: number, rng: Rng): PitchingRat
   };
 }
 
-function hands(position: Position, rng: Rng): { bats: BatSide; throws: Hand } {
+export function hands(position: Position, rng: Rng): { bats: BatSide; throws: Hand } {
   const throwsLeft = position !== 'C' && position !== '2B' && position !== '3B' && position !== 'SS' && rng.chance(0.27);
   const throws: Hand = throwsLeft ? 'L' : 'R';
   const bats: BatSide = rng.chance(0.08) ? 'S' : throwsLeft ? (rng.chance(0.9) ? 'L' : 'R') : rng.chance(0.3) ? 'L' : 'R';

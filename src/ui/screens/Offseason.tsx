@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { contractDemand, freeAgents, isPitcher, refusesToResign, type OffseasonStage, type Player } from '../../engine';
+import { contractDemand, freeAgents, refusesToResign, type OffseasonStage, type Player } from '../../engine';
 import { api, useGame, useSave, useUserTeam } from '../../state/game';
 import { BudgetBar } from '../components/BudgetBar';
 import { Card, PageHeader } from '../components/Card';
@@ -214,31 +214,39 @@ function Resign() {
   );
 }
 
+type FaGroup = 'all' | 'C' | 'IF' | 'OF' | 'SP' | 'RP';
+const FA_GROUPS: Record<FaGroup, string[]> = {
+  all: ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP'],
+  C: ['C'], IF: ['1B', '2B', '3B', 'SS'], OF: ['LF', 'CF', 'RF', 'DH'], SP: ['SP'], RP: ['RP'],
+};
+const FA_LABELS: Record<FaGroup, string> = { all: 'All', C: 'C', IF: 'IF', OF: 'OF/DH', SP: 'SP', RP: 'RP' };
+
 export function FreeAgency() {
   const save = useSave();
   const team = useUserTeam();
   const act = useGame((s) => s.act);
   const openPlayer = useOpenPlayer();
-  const [side, setSide] = useState<'all' | 'bat' | 'pit'>('all');
-  const pool = useMemo(
+  const [group, setGroup] = useState<FaGroup>('all');
+  const [limit, setLimit] = useState(40);
+  const all = useMemo(
     () => freeAgents(save.players)
-      .filter((p) => side === 'all' || (side === 'pit') === isPitcher(p))
+      .filter((p) => FA_GROUPS[group].includes(p.position))
       .map((p) => ({ p, ...scoutedOverall(p, team.id) }))
-      .sort((a, b) => b.ovr - a.ovr || b.pot - a.pot)
-      .slice(0, 60),
-    [save.players, side, team.id],
+      .sort((a, b) => b.ovr - a.ovr || b.pot - a.pot),
+    [save.players, group, team.id],
   );
+  const pool = all.slice(0, limit);
 
   return (
     <div className="grid grid-cols-1 gap-4">
       <Card><BudgetBar used={spending(save.league, save.players, team)} budget={payrollBudget(team)} label="Total spending" /></Card>
-      <Segmented
+      <Segmented<FaGroup>
         label="Position filter"
-        value={side}
-        onChange={setSide}
-        options={[{ value: 'all', label: 'All' }, { value: 'bat', label: 'Hitters' }, { value: 'pit', label: 'Pitchers' }]}
+        value={group}
+        onChange={(g) => { setGroup(g); setLimit(40); }}
+        options={(Object.keys(FA_GROUPS) as FaGroup[]).map((g) => ({ value: g, label: FA_LABELS[g] }))}
       />
-      <Card title="Available" className="px-2 sm:px-4">
+      <Card title={`Available (${all.length})`} className="px-2 sm:px-4">
         {pool.length === 0 ? (
           <p className="px-2 text-sm text-muted">The market is empty.</p>
         ) : (
@@ -253,13 +261,18 @@ export function FreeAgency() {
                   onOpen={openPlayer}
                   right={
                     <button onClick={() => void act(() => api().signFreeAgent(p.id))} className="h-9 shrink-0 rounded-lg bg-accent px-3 text-xs font-semibold text-accent-contrast">
-                      {money(d.salary)}
+                      {money(d.salary)}{d.years > 1 ? ` × ${d.years}` : ''}
                     </button>
                   }
                 />
               );
             })}
           </ul>
+        )}
+        {all.length > pool.length && (
+          <button onClick={() => setLimit(limit + 40)} className="mt-2 h-10 w-full rounded-lg text-sm font-medium text-accent hover:bg-surface-2">
+            Show more ({all.length - pool.length})
+          </button>
         )}
       </Card>
       <p className="text-sm text-muted">Other teams sign the rest of the market when you continue. Signed players join your active roster; the weakest player at that spot moves to AAA.</p>

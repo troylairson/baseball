@@ -24,16 +24,25 @@ export function SettingsSheet({ open, onClose, onShowGuide }: { open: boolean; o
     navigate('/');
   };
 
-  const exportCareer = async () => {
-    if (!save) return;
-    const json = await engine().exportCareer(save.meta.id);
-    if (!json) return;
+  const download = (json: string, name: string) => {
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${save.meta.name.replace(/[^\w-]+/g, '-')}-${save.league.season}.json`;
+    a.download = `${name.replace(/[^\w-]+/g, '-')}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const exportCareer = async () => {
+    if (!save) return;
+    const json = await engine().exportCareer(save.meta.id);
+    if (json) download(json, `${save.meta.name}-${save.league.season}`);
+  };
+
+  const exportRosters = async () => {
+    if (!save) return;
+    const json = await engine().exportRosters();
+    if (json) download(json, `${save.league.settings.name}-rosters-${save.league.season}`);
   };
 
   const remove = async () => {
@@ -71,6 +80,8 @@ export function SettingsSheet({ open, onClose, onShowGuide }: { open: boolean; o
         <p className="text-sm text-muted">Progress is saved automatically on this device. Export a file to back it up or move it to another device.</p>
         <button onClick={onShowGuide} className="h-12 rounded-xl border border-line font-medium hover:bg-surface-2">Show welcome guide</button>
         <button onClick={() => void exportCareer()} className="h-12 rounded-xl border border-line font-medium hover:bg-surface-2">Export career file</button>
+        <button onClick={() => void exportRosters()} className="h-12 rounded-xl border border-line font-medium hover:bg-surface-2">Export rosters</button>
+        <p className="text-xs text-muted">A roster file holds every team and player in this league. Start a new career from it under New Career → Import, or edit it to make your own league.</p>
         <button onClick={exit} className="h-12 rounded-xl border border-line font-medium hover:bg-surface-2">Switch career</button>
         <button onClick={remove} className="h-12 rounded-xl font-medium text-danger hover:bg-surface-2">Delete this career</button>
       </section>

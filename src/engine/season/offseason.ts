@@ -1,3 +1,4 @@
+import { softenDemands, topUpFreeAgents } from '../generate/freeAgents';
 import { generatePlayer } from '../generate/players';
 import { isPitcher, overall } from '../model/ratings';
 import { avg, era, ipString, ops, rate3 } from '../model/stats';
@@ -569,6 +570,8 @@ export function startNewSeason(state: SeasonState, rng: Rng): number[] {
       p.demand = null;
     }
   }
+  topUpFreeAgents(state.players, state.teams.length, rng.fork('free-agents'));
+  softenDemands(state.players);
   for (const p of state.players) {
     p.fatigue = 0;
     // The offseason heals most injuries; only the longest carry over.

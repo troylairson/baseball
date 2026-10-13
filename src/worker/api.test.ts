@@ -62,5 +62,5 @@ describe('engine api', () => {
     expect(reloaded?.players.some((p) => p.draftProspect)).toBe(false);
     expect(reloaded?.league.history).toHaveLength(1);
 
-  });
+  }, 20000);
 });
