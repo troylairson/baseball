@@ -364,7 +364,7 @@ export function createEngineApi(db = new GameDB()) {
     async applyTrend(action: TrendAction): Promise<ActionResult> {
       const res = applyTrendAction(current().state, action);
       if (!res.ok) return res;
-      const done = await commit();
+      const done = await commit(action.kind === 'callUp' ? undefined : { teamsOnly: true });
       return done.ok ? { ...done, message: res.message } : done;
     },
 
@@ -377,22 +377,22 @@ export function createEngineApi(db = new GameDB()) {
 
     async setTicketPrice(level: number): Promise<ActionResult> {
       user().ticketPrice = Math.max(0, Math.min(4, Math.round(level)));
-      return commit();
+      return commit({ teamsOnly: true });
     },
 
     async setAutoRoster(on: boolean): Promise<ActionResult> {
       user().autoRoster = on;
-      return commit();
+      return commit({ teamsOnly: true });
     },
 
     async setStrategy(strategy: TeamStrategy): Promise<ActionResult> {
       user().strategy = strategy;
-      return commit();
+      return commit({ teamsOnly: true });
     },
 
     async setPlan(plan: SavedPlan | null): Promise<ActionResult> {
       user().plan = plan;
-      return commit();
+      return commit({ teamsOnly: true });
     },
 
     async setLevel(playerId: number, level: 'MLB' | 'AAA'): Promise<ActionResult> {
@@ -476,7 +476,7 @@ export function createEngineApi(db = new GameDB()) {
 
     async setScoutingLevel(level: number): Promise<ActionResult> {
       user().scoutingLevel = Math.max(0, Math.min(2, Math.round(level)));
-      return commit();
+      return commit({ teamsOnly: true });
     },
 
     async trade(proposal: TradeProposal): Promise<ActionResult> {

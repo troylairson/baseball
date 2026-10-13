@@ -323,10 +323,13 @@ Make Home's to-dos and the assistant GM read the season like a manager would: sp
 - **Suggested responses** attached to each trend, with one-tap actions where possible: drop a slumping hitter in the order or give him a day off, platoon against same-handed pitching, swap closer/setup roles, skip a tired starter, call up a hot AAA player, change strategy dials (e.g. a quicker hook when the rotation is struggling), or look for a trade at a weak position.
 - **Presentation.** Short, specific cards ("why it matters" + "what you can do"), sparkline-style mini charts on player sheets, and a "Trends" section on Home that replaces the single slump card.
 
+### Rosters, chemistry and the market (done)
+Real MLB rosters (data pack + stats-to-ratings conversion), roster file export/import, a stocked free agent market, team chemistry, and platoons. See README.
+
 ### Other backlog items
+- Animated field for the live game view (spec: `docs/ANIMATED_FIELD.md`)
 - 40-man roster, options and waivers; an AA level
 - International amateur signings; draft bonus pools
-- Team chemistry
 - Pitch types and repertoires in the engine
 - All-Star break and game
 - Commissioner mode; online/shared leagues (needs a backend)

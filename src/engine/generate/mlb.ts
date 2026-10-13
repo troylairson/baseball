@@ -312,8 +312,10 @@ export function mlbPackToRoster(pack: MlbPack): RosterFile {
     }
   }
   const divisions = divisionKeys.map((key) => ({ name: key, conference: confAbbrs.indexOf(key.split(' ')[0]!) }));
+  // A club without a city in its name (the Athletics) gets its home market.
+  const HOME: Record<string, string> = { ATH: 'Sacramento', OAK: 'Oakland' };
   const teams = pack.teams.map((t) => ({
-    key: t.key, city: t.city, name: t.name, abbr: t.abbr, primaryColor: t.colors[0], secondaryColor: t.colors[1], market: t.market,
+    key: t.key, city: t.city === t.name ? HOME[t.key] ?? t.city : t.city, name: t.name, abbr: t.abbr, primaryColor: t.colors[0], secondaryColor: t.colors[1], market: t.market,
     division: divisionKeys.indexOf(`${t.conferenceAbbr} ${t.division}`),
   }));
 

@@ -95,6 +95,8 @@ export interface ProgressChanges {
   removedPlayerIds?: number[];
   /** A new season started: replace the stored schedule. */
   newSchedule?: boolean;
+  /** Only team settings changed (lineup, strategy, prices): skip rewriting players and stats. */
+  teamsOnly?: boolean;
 }
 
 /** Write back everything simulation or a front-office action can change. */
@@ -106,6 +108,7 @@ export async function persistProgress(db: GameDB, save: LoadedSave, changes: Pro
     await db.saves.put(save.meta);
     await db.leagues.put({ ...save.league, saveId });
     await db.teams.bulkPut(save.teams.map(tag(saveId)));
+    if (changes.teamsOnly) return;
     await db.players.bulkPut(save.players.map(tag(saveId)));
     if (changes.removedPlayerIds?.length) {
       await db.players.bulkDelete(changes.removedPlayerIds.map((id) => [saveId, id] as [string, number]));
