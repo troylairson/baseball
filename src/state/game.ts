@@ -66,7 +66,7 @@ export const useGame = create<GameState>((set, get) => ({
   act: async (run) => {
     const res = await run();
     if (res.ok) {
-      set({ save: res.save });
+      set(res.message ? { save: res.save, toast: res.message } : { save: res.save });
       return null;
     }
     set({ toast: res.reason });

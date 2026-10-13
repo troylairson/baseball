@@ -10,6 +10,7 @@ import { fixRoster, rosterIssues } from './roster';
 import { staffRating } from './staff';
 import { updateMorale } from './morale';
 import { recordHomeGate, updateFans } from './finance';
+import { recordUserGame } from './gamelog';
 import { maybeMakeOffer } from './trades';
 import {
   activeSeries, advanceBracket, createPlayoffs, nextSeriesGame, recordSeriesGame, roundName,
@@ -309,6 +310,7 @@ export function simDay(state: SeasonState, preplayed?: Map<number, GameResult>):
     applyWorkload(state, result, true, players);
     applyInjuries(state, game, result, players);
     recordHomeGate(home, league.season, false);
+    recordUserGame(league, state.userTeamId, game, result, players);
     played.push(pg);
   }
 

@@ -28,3 +28,5 @@ export * from './season/morale';
 export * from './season/picks';
 export * from './season/finance';
 export * from './season/legacy';
+export * from './season/gamelog';
+export * from './season/trends';

@@ -1,6 +1,6 @@
 import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
-  acceptOffer, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  acceptOffer, applyTrendAction, type TrendAction, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
   type SeasonState, type TeamStrategy, type TradeProposal, type AdviceAction, type GameResult, type LiveCommand, type LiveSituation,
 } from '../engine';
@@ -36,7 +36,7 @@ export interface SimProgress {
 }
 
 /** Result of a front-office action: the new snapshot, or why it was refused. */
-export type ActionResult = { ok: true; save: LoadedSave } | { ok: false; reason: string };
+export type ActionResult = { ok: true; save: LoadedSave; message?: string } | { ok: false; reason: string };
 
 const yieldToEvents = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -338,6 +338,14 @@ export function createEngineApi(db = new GameDB()) {
       }
       const res = extendPlayer(state, action.playerId);
       return res.ok ? commit() : res;
+    },
+
+    /** Carry out a suggested response to a trend. */
+    async applyTrend(action: TrendAction): Promise<ActionResult> {
+      const res = applyTrendAction(current().state, action);
+      if (!res.ok) return res;
+      const done = await commit();
+      return done.ok ? { ...done, message: res.message } : done;
     },
 
     /** Let the assistant make this offseason stage's decisions. */

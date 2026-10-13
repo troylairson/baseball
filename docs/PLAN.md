@@ -313,7 +313,7 @@ src/
 
 ## 9. Backlog
 
-### Trends & smarter suggestions (next up)
+### Trends & smarter suggestions (done)
 Make Home's to-dos and the assistant GM read the season like a manager would: spot trends, put them in context, and suggest a response.
 
 - **Game logs as the foundation.** Keep a per-player game log for the current season (from box scores) so trends can be measured over windows: last 7 / 15 / 30 days and last N games.

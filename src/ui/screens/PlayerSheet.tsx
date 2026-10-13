@@ -7,6 +7,7 @@ import { useGame } from '../../state/game';
 import { engine } from '../../worker/client';
 import { PlayerActions } from './PlayerActions';
 import { MoraleSummary } from '../components/Morale';
+import { RecentForm } from '../components/RecentForm';
 import { BottomSheet } from '../components/BottomSheet';
 import { RatingBadge, RatingBar } from '../components/Rating';
 import { TeamBadge } from '../components/TeamBadge';
@@ -68,6 +69,7 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
       </div>
 
       <SeasonStats player={player} stats={save.stats.find((s) => s.playerId === player.id)} season={save.league.season} />
+      {player.teamId === userTeamId && <RecentForm player={player} />}
       <CareerStats player={player} />
 
       <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">

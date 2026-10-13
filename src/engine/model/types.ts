@@ -297,6 +297,8 @@ export interface League {
   owner?: OwnerState;
   /** Owners of traded picks, keyed by pick id (season-round-originalTeam). */
   pickOwners?: Record<string, number>;
+  /** Game-by-game logs for the user's team this season (for trends). */
+  userLog?: import('../season/gamelog').UserGameLog;
   /** Single-season records by category key. */
   records?: Record<string, import('../season/legacy').RecordEntry>;
   hallOfFame?: import('../season/legacy').HallOfFamer[];
