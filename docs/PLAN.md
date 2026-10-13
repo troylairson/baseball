@@ -326,8 +326,10 @@ Make Home's to-dos and the assistant GM read the season like a manager would: sp
 ### Rosters, chemistry and the market (done)
 Real MLB rosters (data pack + stats-to-ratings conversion), roster file export/import, a stocked free agent market, team chemistry, and platoons. See README.
 
+### Animated field (done)
+Top-down animated ballpark in the live game view, built from the spec in `docs/ANIMATED_FIELD.md` (steps 1–4 and the reduced-motion part of 5). Not yet: key-moments-only mode, sound/haptics, spray charts from stored play events.
+
 ### Other backlog items
-- Animated field for the live game view (spec: `docs/ANIMATED_FIELD.md`)
 - 40-man roster, options and waivers; an AA level
 - International amateur signings; draft bonus pools
 - Pitch types and repertoires in the engine

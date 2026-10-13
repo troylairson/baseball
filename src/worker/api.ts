@@ -2,7 +2,7 @@ import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
   acceptOffer, applyTrendAction, exportRoster, leagueFromRoster, mlbPackToRoster, parseRosterFile, type MlbPack, type TrendAction, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
-  type SeasonState, type TeamStrategy, type TradeProposal, type AdviceAction, type GameResult, type LiveCommand, type LiveSituation,
+  type SeasonState, type TeamStrategy, type TradeProposal, type AdviceAction, type GameResult, type LiveCommand, type LiveSituation, type PlayEvent,
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
 import {
@@ -24,7 +24,7 @@ export interface TeamPreview {
 
 export type LiveState =
   | { status: 'live'; gameId: number; awayId: number; homeId: number; situation: LiveSituation; save?: LoadedSave }
-  | { status: 'final'; gameId: number; save: LoadedSave }
+  | { status: 'final'; gameId: number; save: LoadedSave; /** Plays since the last pause (the game-ending sequence). */ events?: PlayEvent[] }
   | { status: 'none'; reason: string; save?: LoadedSave };
 
 export type SimMode = 'next' | 'week' | 'month' | 'season' | 'playoffs';
@@ -119,8 +119,10 @@ export function createEngineApi(db = new GameDB()) {
     const { state } = current();
     const gameId = live!.gameId;
     live = null;
-    const played = simDay(state, new Map([[gameId, result]]));
-    return { status: 'final', gameId, save: await persistPlayed(played) };
+    // Play events animate the finish but aren't stored with the box score.
+    const { events, ...box } = result;
+    const played = simDay(state, new Map([[gameId, box]]));
+    return { status: 'final', gameId, save: await persistPlayed(played), events };
   };
 
   return {

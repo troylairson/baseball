@@ -7,6 +7,8 @@ import { chemistryRatingBonus } from '../season/chemistry';
 import type { Rng } from '../rng';
 import { defenseAt, type GamePlan, type LineupSlot } from './lineup';
 import { pitchesFor, resolvePa, type PaResult } from './pa';
+import { battedBallFor, pitchSequence, type Fielder, type PlayEvent, type PlayResult, type RunnerMove } from './plays';
+import { Rng as CosmeticRng } from '../rng';
 
 export interface TeamGameInput {
   team: Team;
@@ -76,6 +78,8 @@ export interface LiveSituation {
   bench: number[];
   bullpen: number[];
   log: string[];
+  /** Structured plays since the previous situation, for the animated field. */
+  events: PlayEvent[];
 }
 
 export interface LiveControl {
@@ -91,6 +95,8 @@ export interface GameResult {
   savePitcher: number | null;
   /** Play-by-play, one entry per event (only when requested). */
   log: string[];
+  /** Structured plays not yet handed out (live games only). */
+  events?: PlayEvent[];
 }
 
 interface Runner {
@@ -198,6 +204,57 @@ export function* liveGame(
   };
   const say = (s: string) => withLog && log.push(s);
 
+  // --- Structured play events (live games only) ------------------------------
+  const tracking = withLog && control !== null;
+  const events: PlayEvent[] = [];
+  let handedOut = 0;
+  /** Cosmetic randomness for play details; separate so outcomes never change. */
+  const fx = new CosmeticRng(`fx-${awayIn.team.id}-${homeIn.team.id}-${awayIn.starterId}-${homeIn.starterId}`);
+  let curInning = 1;
+  let curHalf: 'top' | 'bottom' = 'top';
+  let curOuts = 0;
+  let play: { logStart: number; outs: number; before: (number | null)[]; batterId?: number; scored: number[]; outAt: Map<number, number> } | null = null;
+  const beginPlay = (bases: ({ id: number } | null)[], outs: number, batterId?: number) => {
+    if (!tracking) return;
+    play = { logStart: log.length, outs, before: bases.map((r) => r?.id ?? null), batterId, scored: [], outAt: new Map() };
+  };
+  const markOut = (id: number, base: number) => play?.outAt.set(id, base);
+  const endPlay = (
+    bat: Side, bases: ({ id: number } | null)[], outs: number,
+    extra: Omit<PlayEvent, 'inning' | 'half' | 'outsBefore' | 'outsAfter' | 'battingTeamId' | 'runners' | 'text' | 'awayRuns' | 'homeRuns'>,
+  ) => {
+    if (!tracking || !play) return;
+    const p = play;
+    const after = bases.map((r) => r?.id ?? null);
+    const moveFor = (id: number, from: RunnerMove['from']): RunnerMove => {
+      if (p.scored.includes(id)) return { id, from, to: 4, out: false };
+      const idx = after.indexOf(id);
+      if (idx >= 0) return { id, from, to: (idx + 1) as RunnerMove['to'], out: false };
+      const at = p.outAt.get(id);
+      if (at !== undefined) return { id, from, to: at as RunnerMove['to'], out: true };
+      return { id, from, to: from === 0 ? 0 : ((from + 1) as RunnerMove['to']), out: true };
+    };
+    const runners: RunnerMove[] = [];
+    p.before.forEach((id, i) => { if (id !== null) runners.push(moveFor(id, (i + 1) as RunnerMove['from'])); });
+    if (p.batterId !== undefined) runners.push(moveFor(p.batterId, 0));
+    events.push({
+      ...extra,
+      inning: curInning, half: curHalf, outsBefore: p.outs, outsAfter: Math.min(3, outs),
+      battingTeamId: bat.input.team.id, runners,
+      text: log.slice(p.logStart).map((l) => l.trim()).join(' '),
+      awayRuns: away.runs, homeRuns: home.runs,
+    });
+    play = null;
+  };
+  const recordSub = (bat: Side, kind: 'pitchingChange' | 'pinchHit', playerId: number, replaced: number, line: string) => {
+    if (!tracking) return;
+    events.push({
+      kind, inning: curInning, half: curHalf, outsBefore: curOuts, outsAfter: curOuts, battingTeamId: bat.input.team.id,
+      playerId, ...(kind === 'pitchingChange' ? { pitcherId: replaced } : { batterId: replaced }),
+      runners: [], text: line, awayRuns: away.runs, homeRuns: home.runs,
+    });
+  };
+
   const makeSide = (input: TeamGameInput): Side => {
     const players = new Map(input.roster.map((p) => [p.id, p]));
     const lineup = [...input.plan.lineup];
@@ -299,7 +356,9 @@ export function* liveGame(
         .sort((a, b) => a.fatigue - b.fatigue)[0]?.id;
     }
     if (pick === undefined) return false;
-    say(`Pitching change: ${name(side, pick)} replaces ${name(side, current(side).playerId)}.`);
+    const line = `Pitching change: ${name(side, pick)} replaces ${name(side, current(side).playerId)}.`;
+    say(line);
+    recordSub(side === home ? away : home, 'pitchingChange', pick, current(side).playerId, line);
     enter(side, pick, role, lead, outs);
     return true;
   };
@@ -344,12 +403,16 @@ export function* liveGame(
     side.order[idx] = entry;
     side.batters.set(playerId, entry);
     side.lineup[idx] = { playerId, position: out.position };
-    say(`Pinch hitter: ${name(side, playerId)} bats for ${name(side, out.playerId)}.`);
+    const line = `Pinch hitter: ${name(side, playerId)} bats for ${name(side, out.playerId)}.`;
+    say(line);
+    recordSub(side, 'pinchHit', playerId, out.playerId, line);
   };
 
   const managerChange = (side: Side, playerId: number, lead: number, outs: number) => {
     if (!bullpenFor(side).includes(playerId)) return;
-    say(`Pitching change: ${name(side, playerId)} replaces ${name(side, current(side).playerId)}.`);
+    const line = `Pitching change: ${name(side, playerId)} replaces ${name(side, current(side).playerId)}.`;
+    say(line);
+    recordSub(side === home ? away : home, 'pitchingChange', playerId, current(side).playerId, line);
     enter(side, playerId, 'MR', lead, outs);
   };
 
@@ -366,6 +429,9 @@ export function* liveGame(
         break;
       }
       say(`${half === 'top' ? 'Top' : 'Bottom'} ${ordinal(inning)} — ${bat.input.team.city} batting`);
+      curInning = inning;
+      curHalf = half;
+      curOuts = 0;
 
       let outs = 0;
       const bases: (Runner | null)[] = [null, null, null];
@@ -379,6 +445,7 @@ export function* liveGame(
         const rb = bat.batters.get(runner.id);
         if (rb) rb.line.r++;
         if (batterId !== null) bat.batters.get(batterId)!.line.rbi++;
+        play?.scored.push(runner.id);
         const charged = field.pitchers.find((a) => a.playerId === runner.pitcherId) ?? current(field);
         charged.line.r++;
         if (runner.earned && earned) charged.line.er++;
@@ -391,6 +458,7 @@ export function* liveGame(
       const walkoff = () => half === 'bottom' && inning >= 9 && home.runs > away.runs;
 
       while (outs < 3) {
+        curOuts = outs;
         if (outs > 0 || bases.some(Boolean)) managePitcher(field, inning, field.runs - bat.runs, outs, false);
         let tactic: LiveCommand['type'] = 'auto';
         if (control && (bat.input.team.id === control.teamId || field.input.team.id === control.teamId)) {
@@ -412,7 +480,9 @@ export function* liveGame(
             bench: userBatting ? benchFor(bat) : [],
             bullpen: userBatting ? [] : bullpenFor(field),
             log: [...log],
+            events: events.slice(handedOut),
           };
+          handedOut = events.length;
           if (cmd?.type === 'pinchHit' && userBatting) {
             pinchHit(bat, cmd.playerId);
             continue;
@@ -433,17 +503,22 @@ export function* liveGame(
           const speed = runner.batting.speed;
           if (tactic === 'steal' || (speed > 40 && rng.chance((speed - 40) * 0.012 * [0.45, 1, 1.7][strat(bat).baserunning]!))) {
             const line = bat.batters.get(onFirst.id)!.line;
+            beginPlay(bases, outs);
+            const steal = { kind: 'steal' as const, pitcherId: app.playerId, fielders: [2, fx.chance(0.6) ? 6 : 4] as Fielder[] };
             if (rng.chance(0.72 + (speed - 55) * 0.007 - (field.catcherArm - 50) * 0.004)) {
               line.sb++;
               bases[1] = onFirst;
               bases[0] = null;
               say(`  ${name(bat, onFirst.id)} steals second.`);
+              endPlay(bat, bases, outs, steal);
             } else {
               line.cs++;
               bases[0] = null;
               outs++;
               app.line.outs++;
               say(`  ${name(bat, onFirst.id)} caught stealing.`);
+              markOut(onFirst.id, 2);
+              endPlay(bat, bases, outs, steal);
               continue;
             }
           }
@@ -453,6 +528,13 @@ export function* liveGame(
         bat.batterIdx = (bat.batterIdx + 1) % bat.order.length;
         const batter = bat.players.get(slot.playerId)!;
 
+        const pitchesBefore = app.line.pitches;
+        beginPlay(bases, outs, batter.id);
+        const paEvent = (result: PlayResult, opts: { direction?: number; popup?: boolean } = {}) => {
+          const count = app.line.pitches - pitchesBefore;
+          const spec = battedBallFor(result, fx, { bats: batter.bats === 'S' ? (pitcher.throws === 'L' ? 'R' : 'L') : batter.bats, power: batter.batting.power, ...opts });
+          endPlay(bat, bases, outs, { kind: 'pa', batterId: batter.id, pitcherId: app.playerId, result, pitches: pitchSequence(result, count, fx), ...spec });
+        };
         if (tactic === 'ibb') {
           slot.line.pa++;
           slot.line.bb++;
@@ -468,6 +550,7 @@ export function* liveGame(
             bases[1] = bases[0];
           }
           bases[0] = { id: batter.id, pitcherId: app.playerId, earned: true };
+          paEvent('IBB');
           if (walkoff()) {
             gameOver = true;
             say(`${bat.input.team.city} wins it on a walk-off!`);
@@ -501,6 +584,8 @@ export function* liveGame(
               app.line.outs++;
               advanceAll();
               say(`${who} lays down a sacrifice bunt.`);
+              markOut(batter.id, 1);
+              paEvent('SAC');
             } else if (roll < 0.85) {
               b.ab++;
               b.h++;
@@ -509,6 +594,7 @@ export function* liveGame(
               advanceAll();
               bases[0] = { id: batter.id, pitcherId: app.playerId, earned: true };
               say(`${who} beats out a bunt for a hit.`);
+              paEvent('BUNT_HIT');
             } else {
               b.ab++;
               outs++;
@@ -517,6 +603,7 @@ export function* liveGame(
               if (bases[1]) bases[1] = bases[0] ?? null;
               bases[0] = { id: batter.id, pitcherId: app.playerId, earned: true };
               say(`${who} bunts into a force out.`);
+              paEvent('FC');
             }
             continue;
           }
@@ -532,6 +619,7 @@ export function* liveGame(
         pl.pitches += pitchesFor(result, rng);
         const who = name(bat, batter.id);
         const dir = rng.pick(DIRECTIONS);
+        const direction = DIRECTIONS.indexOf(dir);
         const newRunner = (earned = true): Runner => ({ id: batter.id, pitcherId: app.playerId, earned });
 
         switch (result) {
@@ -542,6 +630,7 @@ export function* liveGame(
             pl.outs++;
             outs++;
             say(`${who} strikes out ${rng.chance(0.25) ? 'looking' : 'swinging'}.`);
+            paEvent('K');
             break;
           case 'BB':
           case 'HBP': {
@@ -562,6 +651,7 @@ export function* liveGame(
               bases[1] = bases[0];
             }
             bases[0] = newRunner();
+            paEvent(result);
             break;
           }
           case 'HR': {
@@ -578,6 +668,7 @@ export function* liveGame(
               bases[i] = null;
             }
             score(newRunner(), batter.id);
+            paEvent('HR', { direction });
             break;
           }
           case '1B':
@@ -617,6 +708,7 @@ export function* liveGame(
               if (r1) score(r1, batter.id);
               bases[2] = newRunner();
             }
+            paEvent(result, { direction });
             break;
           }
           case 'E': {
@@ -629,6 +721,7 @@ export function* liveGame(
             if (r2) bases[2] = r2;
             if (r1) bases[1] = r1;
             bases[0] = newRunner(false);
+            paEvent('E');
             break;
           }
           case 'GO': {
@@ -646,12 +739,16 @@ export function* liveGame(
                 bases[1] = null;
                 if (r3) score(r3, null);
               }
+              markOut(r1.id, 2);
+              markOut(batter.id, 1);
+              paEvent('DP');
               break;
             }
             b.ab++;
             outs++;
             pl.outs++;
             say(`${who} grounds out.`);
+            markOut(batter.id, 1);
             if (outs < 3) {
               if (r3 && rng.chance(0.5)) {
                 bases[2] = null;
@@ -668,6 +765,7 @@ export function* liveGame(
                 }
               }
             }
+            paEvent('GO');
             break;
           }
           case 'FO':
@@ -680,16 +778,20 @@ export function* liveGame(
               say(`${who} hits a sacrifice fly to ${dir}.`);
               bases[2] = null;
               score(r3, batter.id);
+              paEvent('SF', { direction });
               break;
             }
             b.ab++;
             outs++;
             pl.outs++;
             say(result === 'FO' ? `${who} flies out to ${dir}.` : `${who} lines out.`);
+            let tagged = false;
             if (result === 'FO' && outs < 3 && bases[1] && !bases[2] && rng.chance(0.25)) {
               bases[2] = bases[1];
               bases[1] = null;
+              tagged = true;
             }
+            paEvent(result, result === 'FO' ? { direction, popup: !tagged && fx.chance(0.2) } : {});
             break;
           }
         }
@@ -757,5 +859,6 @@ export function* liveGame(
     losingPitcher,
     savePitcher,
     log,
+    ...(tracking ? { events: events.slice(handedOut) } : {}),
   };
 }

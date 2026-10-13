@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  avg, era, ipString, isPitcher, ops, rate3, whip, type LiveCommand, type LiveSituation, type Player, type PlayerSeasonStats, type Team,
+  avg, era, ipString, isPitcher, ops, rate3, whip, type LiveCommand, type LiveSituation, type PlayEvent, type Player, type PlayerSeasonStats, type Team,
 } from '../../engine';
+import { AnimatedField } from '../field/AnimatedField';
+import type { Speed } from '../field/director';
 import { useStatsMap } from '../stats';
 import { useGame, useSave, useUserTeam } from '../../state/game';
 import type { LiveState } from '../../worker/api';
@@ -17,32 +19,64 @@ import { scoutedOverall } from '../scouting';
 
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
+const SPEED_KEY = 'dgm.fieldSpeed';
+
+function initialSpeed(): Speed {
+  try {
+    const saved = localStorage.getItem(SPEED_KEY);
+    if (saved === 'pitch' || saved === 'play' || saved === 'instant') return saved;
+  } catch { /* storage unavailable */ }
+  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'play';
+}
+
 export function LiveGame() {
   const [state, setState] = useState<LiveState | null>(null);
   const [busy, setBusy] = useState(false);
+  // What the screen shows lags the engine while a play animates.
+  const [shown, setShown] = useState<LiveState | null>(null);
+  const [queue, setQueue] = useState<PlayEvent[]>([]);
+  const [speed, setSpeedState] = useState<Speed>(initialSpeed);
+  const setSpeed = (s: Speed) => {
+    setSpeedState(s);
+    try { localStorage.setItem(SPEED_KEY, s); } catch { /* storage unavailable */ }
+  };
 
   // Live results (and any days simmed to reach the game) update the career snapshot.
-  const apply = useCallback((s: LiveState) => {
+  const apply = useCallback((s: LiveState, animate = true) => {
     if (s.save) useGame.setState({ save: s.save });
     setState(s);
+    const events = s.status === 'live' ? s.situation.events : s.status === 'final' ? s.events ?? [] : [];
+    const plays = events.filter((e) => e.kind !== 'pinchHit');
+    if (animate && plays.length) {
+      setQueue(plays);
+    } else {
+      setQueue([]);
+      setShown(s);
+    }
   }, []);
+  const settle = useCallback(() => {
+    setQueue([]);
+    setShown(state);
+  }, [state]);
 
   useEffect(() => {
     let live = true;
-    engine().liveStart().then((s) => live && apply(s));
+    engine().liveStart().then((s) => live && apply(s, false));
     return () => {
       live = false;
     };
   }, [apply]);
 
-  const run = async (fn: () => Promise<LiveState>) => {
+  const run = async (fn: () => Promise<LiveState>, animate = true) => {
     setBusy(true);
-    apply(await fn());
+    apply(await fn(), animate);
     setBusy(false);
   };
 
-  if (!state) return <p className="py-20 text-center text-muted">Heading to the ballpark…</p>;
-  if (state.status === 'none') {
+  // Keep the field on screen while the game-ending play animates.
+  const view = queue.length && shown?.status === 'live' ? shown : state;
+  if (!state || !view) return <p className="py-20 text-center text-muted">Heading to the ballpark…</p>;
+  if (view.status === 'none' && state.status === 'none') {
     return (
       <div className="py-16 text-center">
         <p className="font-semibold">{state.reason}</p>
@@ -50,24 +84,29 @@ export function LiveGame() {
       </div>
     );
   }
-  if (state.status === 'final') return <Final gameId={state.gameId} />;
+  if (view.status !== 'live') return state.status === 'final' ? <Final gameId={state.gameId} /> : null;
   return (
     <Live
-      s={state.situation}
-      awayId={state.awayId}
-      homeId={state.homeId}
-      busy={busy}
+      s={view.situation}
+      awayId={view.awayId}
+      homeId={view.homeId}
+      busy={busy || queue.length > 0}
+      queue={queue}
+      speed={speed}
+      setSpeed={setSpeed}
+      onPlayed={settle}
       command={(cmd) => void run(() => engine().liveCommand(cmd))}
-      simInning={() => void run(() => engine().liveSimInning())}
-      finish={() => void run(() => engine().liveFinish())}
+      simInning={() => void run(() => engine().liveSimInning(), false)}
+      finish={() => void run(() => engine().liveFinish(), false)}
     />
   );
 }
 
 function Live({
-  s, awayId, homeId, busy, command, simInning, finish,
+  s, awayId, homeId, busy, queue, speed, setSpeed, onPlayed, command, simInning, finish,
 }: {
   s: LiveSituation; awayId: number; homeId: number; busy: boolean;
+  queue: PlayEvent[]; speed: Speed; setSpeed: (s: Speed) => void; onPlayed: () => void;
   command: (c: LiveCommand) => void; simInning: () => void; finish: () => void;
 }) {
   const save = useSave();
@@ -83,6 +122,9 @@ function Live({
   const canSteal = s.userBatting && on1 !== null && on2 === null && s.outs < 2;
   const canBunt = s.userBatting && (on1 !== null || on2 !== null) && on3 === null && s.outs < 2;
   const plays = s.log.filter((l) => !/^(Top|Bottom) /.test(l)).slice(-5).reverse();
+  const names = new Map([...players.values()].filter((p) => p.teamId === awayId || p.teamId === homeId).map((p) => [p.id, p.lastName]));
+  const battingTeam = s.half === 'top' ? away : home;
+  const fieldingTeam = s.half === 'top' ? home : away;
 
   const btn = 'h-11 rounded-xl border border-line bg-surface px-3 text-sm font-semibold hover:bg-surface-2 disabled:opacity-40';
 
@@ -103,10 +145,33 @@ function Live({
         <Linescore away={away} home={home} a={s.awayInnings} h={s.homeInnings} />
       </section>
 
-      {/* Diamond + matchup */}
-      <section className="mt-3 grid grid-cols-[9rem_1fr] items-center gap-3 rounded-2xl border border-line bg-surface p-4">
-        <Diamond bases={s.bases} players={players} />
-        <div className="min-w-0 space-y-3">
+      {/* Field + matchup */}
+      <section className="mt-3 overflow-hidden rounded-2xl border border-line bg-surface">
+        <AnimatedField
+          fieldingColor={fieldingTeam.primaryColor}
+          battingColor={battingTeam.primaryColor}
+          names={names}
+          bases={s.bases}
+          batterId={s.batterId}
+          queue={queue}
+          speed={speed}
+          onDone={onPlayed}
+          aside={
+            <select
+              aria-label="Animation speed"
+              value={speed}
+              onChange={(e) => setSpeed(e.target.value as Speed)}
+              className="h-8 shrink-0 rounded-lg border border-line bg-surface px-2 text-xs font-medium"
+            >
+              <option value="pitch">Every pitch</option>
+              <option value="play">Each play</option>
+              <option value="instant">Instant</option>
+            </select>
+          }
+        />
+      </section>
+      <section className="mt-3 rounded-2xl border border-line bg-surface p-4">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <Matchup label="At bat" p={batter} userTeamId={team.id}
             detail={`${s.batterLine.h}-${s.batterLine.ab} today${s.batterLine.hr ? `, ${s.batterLine.hr} HR` : ''}${s.batterLine.bb ? `, ${s.batterLine.bb} BB` : ''}`} />
           <Matchup label="Pitching" p={pitcher} userTeamId={team.id}
@@ -126,8 +191,7 @@ function Live({
 
       {/* Manager controls */}
       <section className="pb-safe sticky bottom-20 z-20 mt-3 rounded-2xl border border-line bg-surface p-3 shadow-lg md:bottom-4">
-        <p className="mb-2 px-1 text-xs text-muted">{s.userBatting ? 'Your team is batting.' : 'Your team is in the field.'}</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2 [&>button]:h-9 [&>button]:text-xs">
           {s.userBatting ? (
             <>
               <button className={btn} disabled={busy || !canSteal} onClick={() => command({ type: 'steal' })}>Steal</button>
@@ -141,16 +205,16 @@ function Live({
             </>
           )}
         </div>
-        <button
-          onClick={() => command({ type: s.userBatting ? 'swing' : 'auto' })}
-          disabled={busy}
-          className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent font-semibold text-accent-contrast disabled:opacity-60"
-        >
-          <Icon name="play" className="size-4" /> {s.userBatting ? 'Swing away' : 'Pitch to him'}
-        </button>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <button className={btn} disabled={busy} onClick={simInning}>Sim half-inning</button>
-          <button className={btn} disabled={busy} onClick={finish}>Sim to end</button>
+        <div className="mt-2 grid grid-cols-[1fr_auto_auto] gap-2">
+          <button
+            onClick={() => command({ type: s.userBatting ? 'swing' : 'auto' })}
+            disabled={busy}
+            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-accent font-semibold text-accent-contrast disabled:opacity-60"
+          >
+            <Icon name="play" className="size-4" /> {s.userBatting ? 'Swing away' : 'Pitch to him'}
+          </button>
+          <button className={`${btn} text-xs`} disabled={busy} onClick={simInning} aria-label="Sim half-inning">Sim ½ inn</button>
+          <button className={`${btn} text-xs`} disabled={busy} onClick={finish} aria-label="Sim to end">Sim game</button>
         </div>
       </section>
 
@@ -198,28 +262,6 @@ function Linescore({ away, home, a, h }: { away: Team; home: Team; a: number[]; 
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function Diamond({ bases, players }: { bases: (number | null)[]; players: Map<number, Player> }) {
-  // Base positions: first (right), second (top), third (left).
-  const pos = [[88, 50], [50, 12], [12, 50]] as const;
-  return (
-    <div>
-      <svg viewBox="0 0 100 100" className="w-full" role="img" aria-label={`Runners: ${['first', 'second', 'third'].filter((_, i) => bases[i] !== null).join(', ') || 'none'}`}>
-        <path d="M50 88 L88 50 L50 12 L12 50 Z" fill="none" stroke="var(--border)" strokeWidth="2" />
-        <rect x="45" y="83" width="10" height="10" transform="rotate(45 50 88)" fill="var(--muted)" />
-        {pos.map(([x, y], i) => (
-          <rect key={i} x={x - 7} y={y - 7} width="14" height="14" transform={`rotate(45 ${x} ${y})`}
-            fill={bases[i] !== null ? 'var(--accent)' : 'var(--surface-2)'} stroke="var(--border)" strokeWidth="1.5" />
-        ))}
-      </svg>
-      <ul className="mt-1 space-y-0.5 text-[11px] text-muted">
-        {['1B', '2B', '3B'].map((b, i) => bases[i] !== null && (
-          <li key={b}><span className="font-semibold text-ink">{b}</span> {shortName(players.get(bases[i]!)!)}</li>
-        ))}
-      </ul>
     </div>
   );
 }

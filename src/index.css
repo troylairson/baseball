@@ -100,3 +100,13 @@ body {
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* Animated field overlays (opacity only: SVG transforms are set as attributes). */
+@keyframes fade {
+  from { opacity: 0.3; }
+  to { opacity: 0; }
+}
+@keyframes pop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
