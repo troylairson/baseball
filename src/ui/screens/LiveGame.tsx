@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ipString, isPitcher, type LiveCommand, type LiveSituation, type Player, type Team } from '../../engine';
+import {
+  avg, era, ipString, isPitcher, ops, rate3, whip, type LiveCommand, type LiveSituation, type Player, type PlayerSeasonStats, type Team,
+} from '../../engine';
+import { useStatsMap } from '../stats';
 import { useGame, useSave, useUserTeam } from '../../state/game';
 import type { LiveState } from '../../worker/api';
 import { engine } from '../../worker/client';
@@ -221,14 +224,26 @@ function Diamond({ bases, players }: { bases: (number | null)[]; players: Map<nu
   );
 }
 
+/** Season line for the live view: hitters' slash stats, pitchers' run prevention. */
+function seasonLine(p: Player, s: PlayerSeasonStats | undefined): string {
+  if (isPitcher(p)) {
+    if (!s || !s.pit.outs) return 'No innings yet this season';
+    return `${era(s.pit).toFixed(2)} ERA · ${whip(s.pit).toFixed(2)} WHIP · ${s.pit.w}-${s.pit.l}${s.pit.sv ? `, ${s.pit.sv} SV` : ''}`;
+  }
+  if (!s || !s.bat.pa) return 'No at-bats yet this season';
+  return `${rate3(avg(s.bat))} AVG · ${rate3(ops(s.bat))} OPS · ${s.bat.hr} HR`;
+}
+
 function Matchup({ label, p, detail, userTeamId }: { label: string; p: Player; detail: string; userTeamId: number }) {
   const { ovr } = scoutedOverall(p, userTeamId);
+  const stats = useStatsMap();
   return (
     <div className="flex items-center gap-2">
       <div className="min-w-0 flex-1">
         <p className="text-[11px] uppercase tracking-wide text-muted">{label}</p>
         <p className="truncate font-semibold">{fullName(p)}</p>
         <p className="truncate text-xs text-muted">{detail}</p>
+        <p className="text-xs font-medium tabular-nums">{seasonLine(p, stats.get(p.id))}</p>
       </div>
       <RatingBadge value={ovr} size="sm" />
     </div>
@@ -238,6 +253,7 @@ function Matchup({ label, p, detail, userTeamId }: { label: string; p: Player; d
 function PickSheet({
   open, title, ids, players, userTeamId, onPick, onClose,
 }: { open: boolean; title: string; ids: number[]; players: Map<number, Player>; userTeamId: number; onPick: (id: number) => void; onClose: () => void }) {
+  const stats = useStatsMap();
   return (
     <BottomSheet open={open} onClose={onClose} title={title}>
       <h2 className="mb-3 pr-10 text-xl font-bold">{title}</h2>
@@ -251,7 +267,9 @@ function PickSheet({
                 <span className="w-8 text-center text-xs font-bold text-muted">{p.position}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{fullName(p)}</span>
-                  <span className="block text-xs text-muted">{isPitcher(p) ? `Throws ${p.throws}${tired ? ' · tired' : ''}` : `Bats ${p.bats}`}</span>
+                  <span className="block truncate text-xs text-muted">
+                    {isPitcher(p) ? `Throws ${p.throws}${tired ? ' · tired' : ''}` : `Bats ${p.bats}`} · {seasonLine(p, stats.get(id))}
+                  </span>
                 </span>
                 <RatingBadge value={scoutedOverall(p, userTeamId).ovr} size="sm" />
               </button>

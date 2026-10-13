@@ -43,3 +43,22 @@ describe('generateSchedule', () => {
     }
   });
 });
+
+describe('playoffPicture', () => {
+  it('lists division leaders, wild cards and the chase with games back', async () => {
+    const { playoffPicture } = await import('./playoffs');
+    const { teams, league } = generateLeague(3);
+    teams.forEach((t, i) => { t.wins = 60 + i; t.losses = 100 - i; });
+    const races = playoffPicture(league, teams);
+    expect(races).toHaveLength(2);
+    for (const race of races) {
+      const confTeams = teams.filter((t) => t.conferenceId === race.conferenceId);
+      expect(race.rows).toHaveLength(confTeams.length);
+      expect(race.rows.filter((r) => r.status === 'division')).toHaveLength(2);
+      expect(race.rows.filter((r) => r.status === 'wildcard')).toHaveLength(2);
+      const out = race.rows.filter((r) => r.status === 'out');
+      expect(out.every((r) => r.games >= 0)).toBe(true);
+      expect(out.map((r) => r.games)).toEqual([...out.map((r) => r.games)].sort((a, b) => a - b));
+    }
+  });
+});

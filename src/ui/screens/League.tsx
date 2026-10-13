@@ -4,6 +4,7 @@ import { Card, PageHeader } from '../components/Card';
 import { Bracket } from '../components/Bracket';
 import { RecordBook } from '../components/RecordBook';
 import { LeaderBoard } from '../components/Leaders';
+import { PlayoffPicture } from '../components/PlayoffPicture';
 import { BATTING_LEADERS, PITCHING_LEADERS } from '../stats';
 import { RatingBadge } from '../components/Rating';
 import { Segmented } from '../components/Segmented';
@@ -25,6 +26,7 @@ export function League() {
     { value: 'history', label: 'History' },
   ] as { value: View; label: string }[];
   const [side, setSide] = useState<'bat' | 'pit'>('bat');
+  const [standingsView, setStandingsView] = useState<'divisions' | 'race'>('divisions');
   const playerMap = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const teamMap = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
   const teamGames = Math.max(...teams.map((t) => t.wins + t.losses));
@@ -64,6 +66,21 @@ export function League() {
           </div>
         </>
       ) : view === 'standings' ? (
+        <>
+        <div className="mb-4 flex gap-2">
+          {(['divisions', 'race'] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => setStandingsView(k)}
+              className={`h-9 rounded-full px-4 text-sm font-medium ${standingsView === k ? 'bg-ink text-bg' : 'bg-surface-2 text-muted'}`}
+            >
+              {k === 'divisions' ? 'Divisions' : 'Playoff picture'}
+            </button>
+          ))}
+        </div>
+        {standingsView === 'race' ? (
+          <PlayoffPicture league={league} teams={teams} userTeamId={meta.userTeamId} />
+        ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {league.divisions.map((d) => (
             <Card key={d.id}>
@@ -71,6 +88,8 @@ export function League() {
             </Card>
           ))}
         </div>
+        )}
+        </>
       ) : (
         <Card>
           <ol className="-mx-2">

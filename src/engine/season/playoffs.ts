@@ -21,14 +21,70 @@ export function seedConference(league: League, teams: Team[], conferenceId: numb
   return [...winners, ...wildCards];
 }
 
+/** Playoff berths per conference for this league's size. */
+export function playoffSlots(league: League, teams: Team[]): number {
+  const confs = league.conferences.length >= 2 ? league.conferences.slice(0, 2) : league.conferences;
+  const perConf = Math.min(PLAYOFF_TEAMS_PER_CONFERENCE, ...confs.map((c) => teams.filter((t) => t.conferenceId === c.id).length));
+  return perConf >= 4 ? 4 : 2;
+}
+
+export interface RaceRow {
+  team: Team;
+  /** Playoff seed if the season ended today. */
+  seed: number | null;
+  status: 'division' | 'wildcard' | 'out';
+  /**
+   * For wild-card holders: games ahead of the first team out.
+   * For teams outside: games behind the last playoff spot.
+   * For division leaders: games ahead of their division's runner-up.
+   */
+  games: number;
+  divisionName: string;
+}
+
+export interface ConferenceRace {
+  conferenceId: number;
+  name: string;
+  rows: RaceRow[];
+}
+
+const gamesApart = (a: Team, b: Team) => (a.wins - b.wins + (b.losses - a.losses)) / 2;
+
+/** If the season ended today: division leaders, wild cards and the chase. */
+export function playoffPicture(league: League, teams: Team[]): ConferenceRace[] {
+  const slots = playoffSlots(league, teams);
+  const confs = league.conferences.length >= 2 ? league.conferences.slice(0, 2) : league.conferences;
+  return confs.map((conf) => {
+    const divisions = league.divisions.filter((d) => d.conferenceId === conf.id);
+    const divName = (t: Team) => divisions.find((d) => d.id === t.divisionId)?.name ?? '';
+    const seeds = seedConference(league, teams, conf.id, slots);
+    const leaders = new Set(divisions.map((d) => teams.filter((t) => t.divisionId === d.id).sort(byRecord)[0]?.id));
+    const others = teams.filter((t) => t.conferenceId === conf.id && !seeds.includes(t)).sort(byRecord);
+    const firstOut = others[0];
+    const lastIn = seeds[seeds.length - 1]!;
+    const rows: RaceRow[] = seeds.map((t, i) => {
+      const division = leaders.has(t.id);
+      const runnerUp = teams.filter((x) => x.divisionId === t.divisionId && x.id !== t.id).sort(byRecord)[0];
+      return {
+        team: t,
+        seed: i + 1,
+        status: division ? 'division' : 'wildcard',
+        games: division ? (runnerUp ? gamesApart(t, runnerUp) : 0) : firstOut ? gamesApart(t, firstOut) : 0,
+        divisionName: divName(t),
+      };
+    });
+    for (const t of others) rows.push({ team: t, seed: null, status: 'out', games: gamesApart(lastIn, t), divisionName: divName(t) });
+    return { conferenceId: conf.id, name: conf.name, rows };
+  });
+}
+
 /** Build the bracket: per-conference rounds, then a final between conference champions. */
 export function createPlayoffs(league: League, teams: Team[]): PlayoffState {
   const series: PlayoffSeries[] = [];
   let id = 1;
   const bestOfFor = (round: number) => (round === 1 ? 5 : 7);
   const confs = league.conferences.length >= 2 ? league.conferences.slice(0, 2) : league.conferences;
-  const perConf = Math.min(PLAYOFF_TEAMS_PER_CONFERENCE, ...confs.map((c) => teams.filter((t) => t.conferenceId === c.id).length));
-  const size = perConf >= 4 ? 4 : 2;
+  const size = playoffSlots(league, teams);
   const champs: number[] = [];
 
   for (const conf of confs) {

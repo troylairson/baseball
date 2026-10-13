@@ -311,6 +311,28 @@ src/
 
 ---
 
+## 9. Backlog
+
+### Trends & smarter suggestions (next up)
+Make Home's to-dos and the assistant GM read the season like a manager would: spot trends, put them in context, and suggest a response.
+
+- **Game logs as the foundation.** Keep a per-player game log for the current season (from box scores) so trends can be measured over windows: last 7 / 15 / 30 days and last N games.
+- **Hitter trends.** Hitless streaks ("0-for-17 over 5 games"), hot streaks, and slumps measured in time *and* against the player's own season and career line — e.g. ".158 over his last 12 games vs. .281 season / .274 career". Distinguish a cold patch (BABIP luck) from a real decline (K-rate up, power down).
+- **Pitcher trends.** Starters with rising ERA/WHIP over their last 3–5 starts, velocity-style fatigue (pitch counts, short rest), relievers who have been used heavily.
+- **Team trends.** Bullpen ERA over the last 7 games vs. season, offense runs/game over the last 10, record in one-run games, record vs. LHP/RHP, home/road splits, win/loss streaks.
+- **Suggested responses** attached to each trend, with one-tap actions where possible: drop a slumping hitter in the order or give him a day off, platoon against same-handed pitching, swap closer/setup roles, skip a tired starter, call up a hot AAA player, change strategy dials (e.g. a quicker hook when the rotation is struggling), or look for a trade at a weak position.
+- **Presentation.** Short, specific cards ("why it matters" + "what you can do"), sparkline-style mini charts on player sheets, and a "Trends" section on Home that replaces the single slump card.
+
+### Other backlog items
+- 40-man roster, options and waivers; an AA level
+- International amateur signings; draft bonus pools
+- Team chemistry
+- Pitch types and repertoires in the engine
+- All-Star break and game
+- Commissioner mode; online/shared leagues (needs a backend)
+
+---
+
 ### Research sources
 - [OOTP 27 feature overview — Bleacher Report](https://www.bleacherreport.com/articles/25396739-out-park-baseball-27-trailer-drops-includes-world-baseball-classic-more-new-features)
 - [OOTP 27 launch — One More Game](https://onemoregame.ph/2026/02/out-of-the-park-baseball-27-launch/)
