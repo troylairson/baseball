@@ -1,4 +1,5 @@
-import type { League, Team } from '../model/types';
+import { overall } from '../model/ratings';
+import type { League, Player, Team } from '../model/types';
 
 export const DRAFT_ROUNDS = 4;
 
@@ -38,10 +39,23 @@ export function picksOwnedBy(league: League, teams: Team[], teamId: number): Pic
   return out;
 }
 
-/** Where a team's pick is likely to land (1 = first overall): worst record picks first. */
-export function projectedSlot(teams: Team[], originalTeamId: number): number {
-  const pct = (t: Team) => (t.wins + t.losses ? t.wins / (t.wins + t.losses) : 0.5);
-  const order = [...teams].sort((a, b) => pct(a) - pct(b) || (a.runsScored - a.runsAllowed) - (b.runsScored - b.runsAllowed));
+/**
+ * Where a team's pick is likely to land (1 = first overall): worst record
+ * picks first. Early in a season, roster strength stands in for the record.
+ */
+export function projectedSlot(teams: Team[], originalTeamId: number, players?: Player[]): number {
+  const games = Math.min(...teams.map((t) => t.wins + t.losses));
+  let key: (t: Team) => number;
+  if (games < 20 && players) {
+    const strength = new Map(teams.map((t) => {
+      const roster = players.filter((p) => p.teamId === t.id && p.level === 'MLB' && !p.retired);
+      return [t.id, roster.reduce((s, p) => s + overall(p), 0) / Math.max(1, roster.length)];
+    }));
+    key = (t) => strength.get(t.id)!;
+  } else {
+    key = (t) => (t.wins + t.losses ? t.wins / (t.wins + t.losses) : 0.5) + (t.runsScored - t.runsAllowed) / 1e5;
+  }
+  const order = [...teams].sort((a, b) => key(a) - key(b));
   return order.findIndex((t) => t.id === originalTeamId) + 1;
 }
 
@@ -50,15 +64,15 @@ export function projectedSlot(teams: Team[], originalTeamId: number): number {
  * rounder is worth about a top prospect; later rounds fall off fast.
  * Rebuilders love picks; contenders discount them.
  */
-export function pickValue(teams: Team[], ref: PickRef, contending: boolean): number {
-  const slot = projectedSlot(teams, ref.originalTeamId);
+export function pickValue(teams: Team[], ref: PickRef, contending: boolean, players?: Player[]): number {
+  const slot = projectedSlot(teams, ref.originalTeamId, players);
   const base = ref.round === 1 ? 150 * (1 - ((slot - 1) / teams.length) * 0.6) : ref.round === 2 ? 45 : ref.round === 3 ? 18 : 8;
   return base * (contending ? 0.6 : 1.2);
 }
 
-export function pickLabel(teams: Team[], ref: PickRef, ownerId?: number): string {
+export function pickLabel(teams: Team[], ref: PickRef, ownerId?: number, players?: Player[]): string {
   const orig = teams.find((t) => t.id === ref.originalTeamId);
   const suffix = ownerId !== undefined && ownerId !== ref.originalTeamId ? ` (from ${orig?.abbr ?? '?'})` : '';
-  const proj = ref.round === 1 ? ` · proj. #${projectedSlot(teams, ref.originalTeamId)}` : '';
+  const proj = ref.round === 1 ? ` · proj. #${projectedSlot(teams, ref.originalTeamId, players)}` : '';
   return `${ref.season} round ${ref.round}${suffix}${proj}`;
 }

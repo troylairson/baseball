@@ -93,7 +93,7 @@ export function evaluateTrade(ctx: TradeContext, proposal: TradeProposal): Trade
     return no(`That adds too much salary — they're near their budget.`);
   }
 
-  const picksValue = (ids: string[]) => ids.reduce((sum, id) => sum + pickValue(ctx.teams, parsePickId(id), contending), 0);
+  const picksValue = (ids: string[]) => ids.reduce((sum, id) => sum + pickValue(ctx.teams, parsePickId(id), contending, ctx.players), 0);
   const valueIn = sumValue(give, contending) + picksValue(givePicks);
   const valueOut = sumValue(get, contending) + picksValue(getPicks);
   // AI teams want to win the trade, and value quality over quantity.

@@ -33,7 +33,7 @@ export function FrontOffice() {
   return (
     <>
       <PageHeader title="Front Office" subtitle="Run the business of baseball" />
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card title="Finances">
           <BudgetBar used={spend} budget={budget} label="Total spending" />
           <dl className="mt-3 space-y-1 text-sm">

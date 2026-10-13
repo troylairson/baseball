@@ -32,7 +32,7 @@ export function battingWar(b: BattingLine, position: Position, lg: LeagueContext
   const battingRuns = ((woba(b) - lg.woba) / 1.2) * b.pa;
   const baserunning = b.sb * 0.2 - b.cs * 0.4;
   const positional = ((POSITION_RUNS[position] ?? 0) * b.pa) / 600;
-  const replacement = (20 * b.pa) / 600;
+  const replacement = (17 * b.pa) / 600;
   return (battingRuns + baserunning + positional + replacement) / RUNS_PER_WIN;
 }
 
@@ -42,7 +42,7 @@ export function pitchingWar(p: PitchingLine, lg: LeagueContext): number {
   const ra9 = (p.r * 9) / ip;
   // Replacement level ≈ 1.3 runs/9 worse than average for starters, less for relievers.
   const starterShare = p.g ? p.gs / p.g : 0;
-  const replacement = lg.ra9 + 0.8 + starterShare * 0.5;
+  const replacement = lg.ra9 + 0.65 + starterShare * 0.45;
   return (((replacement - ra9) * ip) / 9) / RUNS_PER_WIN;
 }
 

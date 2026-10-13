@@ -58,7 +58,7 @@ export function SimButton() {
           <button
             onClick={() => setMenu(true)}
             disabled={running}
-            className="grid w-9 place-items-center border-l border-accent-contrast/20 disabled:opacity-50"
+            className="grid grid-cols-1 w-9 place-items-center border-l border-accent-contrast/20 disabled:opacity-50"
             aria-label="More sim options"
           >
             <Icon name="chevron" className="size-4 rotate-90" />

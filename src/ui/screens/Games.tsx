@@ -49,7 +49,7 @@ function MySchedule() {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <Card title="Recent results">
         {results.length === 0 ? (
           <p className="text-sm text-muted">No games played yet. Tap Play to start the season.</p>
@@ -87,11 +87,11 @@ function Scores() {
   return (
     <>
       <div className="mb-4 flex items-center justify-between rounded-2xl border border-line bg-surface p-1">
-        <button disabled={idx <= 0} onClick={() => setPicked(dates[idx - 1]!)} className="grid size-10 place-items-center rounded-xl hover:bg-surface-2 disabled:opacity-30" aria-label="Previous day">
+        <button disabled={idx <= 0} onClick={() => setPicked(dates[idx - 1]!)} className="grid grid-cols-1 size-10 place-items-center rounded-xl hover:bg-surface-2 disabled:opacity-30" aria-label="Previous day">
           <Icon name="back" />
         </button>
         <span className="font-semibold">{formatDate(date)}</span>
-        <button disabled={idx >= dates.length - 1} onClick={() => setPicked(dates[idx + 1]!)} className="grid size-10 place-items-center rounded-xl hover:bg-surface-2 disabled:opacity-30" aria-label="Next day">
+        <button disabled={idx >= dates.length - 1} onClick={() => setPicked(dates[idx + 1]!)} className="grid grid-cols-1 size-10 place-items-center rounded-xl hover:bg-surface-2 disabled:opacity-30" aria-label="Next day">
           <Icon name="chevron" />
         </button>
       </div>

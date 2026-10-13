@@ -82,6 +82,10 @@ export interface Player {
   injury?: Injury | null;
   /** 0–100; 50 is neutral. */
   morale?: number;
+  /** Season the player retired. */
+  retiredSeason?: number;
+  /** Accumulated career stats and honors. */
+  career?: import('../season/legacy').CareerTotals;
   /** Has asked the user to trade him. */
   tradeRequested?: boolean;
 }
@@ -293,6 +297,9 @@ export interface League {
   owner?: OwnerState;
   /** Owners of traded picks, keyed by pick id (season-round-originalTeam). */
   pickOwners?: Record<string, number>;
+  /** Single-season records by category key. */
+  records?: Record<string, import('../season/legacy').RecordEntry>;
+  hallOfFame?: import('../season/legacy').HallOfFamer[];
   /** Last date fan interest was updated. */
   fansDate?: string;
   /** Last date morale was updated. */

@@ -40,7 +40,7 @@ export function Home() {
 
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <section
         className="relative overflow-hidden rounded-2xl p-5 text-white md:col-span-2"
         style={{ background: `linear-gradient(135deg, ${team.primaryColor}, ${team.primaryColor}cc 60%, ${team.secondaryColor})` }}
@@ -248,7 +248,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Todo({ icon, title, detail, to, onClick }: { icon: IconName; title: string; detail: string; to?: string; onClick?: () => void }) {
   const body = (
     <>
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent/12 text-accent">
+      <span className="grid grid-cols-1 size-10 shrink-0 place-items-center rounded-xl bg-accent/12 text-accent">
         <Icon name={icon} />
       </span>
       <span className="min-w-0 flex-1">

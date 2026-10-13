@@ -54,7 +54,7 @@ export function NewCareer() {
   return (
     <div className="pt-safe mx-auto min-h-dvh max-w-2xl px-4 pb-32 pt-4">
       <div className="mb-4 flex items-center gap-2">
-        <Link to="/" className="grid size-10 place-items-center rounded-full hover:bg-surface-2" aria-label="Back">
+        <Link to="/" className="grid grid-cols-1 size-10 place-items-center rounded-full hover:bg-surface-2" aria-label="Back">
           <Icon name="back" />
         </Link>
         <h1 className="flex-1 text-xl font-bold">Choose your team</h1>
@@ -95,7 +95,7 @@ export function NewCareer() {
       {divisions.map((div) => (
         <section key={div} className="mb-5">
           <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-muted">{div}</h2>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {teams!.filter((t) => t.divisionName === div).map((t) => (
               <button
                 key={t.id}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSave } from '../../state/game';
 import { Card, PageHeader } from '../components/Card';
 import { Bracket } from '../components/Bracket';
-import { HistoryList } from '../components/History';
+import { RecordBook } from '../components/RecordBook';
 import { LeaderBoard } from '../components/Leaders';
 import { BATTING_LEADERS, PITCHING_LEADERS } from '../stats';
 import { RatingBadge } from '../components/Rating';
@@ -43,7 +43,7 @@ export function League() {
       {view === 'playoffs' && league.playoffs ? (
         <Bracket playoffs={league.playoffs} teams={teams} userTeamId={meta.userTeamId} />
       ) : view === 'history' ? (
-        <HistoryList history={league.history ?? []} teams={teams} players={players} userTeamId={meta.userTeamId} />
+        <RecordBook league={league} teams={teams} players={players} userTeamId={meta.userTeamId} />
       ) : view === 'leaders' ? (
         <>
           <div className="mb-4 flex gap-2">
@@ -57,14 +57,14 @@ export function League() {
               </button>
             ))}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {(side === 'bat' ? BATTING_LEADERS : PITCHING_LEADERS).map((l) => (
               <LeaderBoard key={l.key} leader={l} stats={stats} players={playerMap} teams={teamMap} teamGames={teamGames} />
             ))}
           </div>
         </>
       ) : view === 'standings' ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {league.divisions.map((d) => (
             <Card key={d.id}>
               <DivisionStandings division={d} teams={teams} userTeamId={meta.userTeamId} />

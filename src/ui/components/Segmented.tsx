@@ -9,7 +9,7 @@ export function Segmented<T extends string>({
           role="tab"
           aria-selected={o.value === value}
           onClick={() => onChange(o.value)}
-          className={`min-h-9 flex-1 rounded-lg px-3 text-sm font-medium ${
+          className={`min-h-9 min-w-0 flex-1 rounded-lg font-medium ${options.length > 4 ? 'px-1 text-xs' : 'px-2 text-sm'} ${
             o.value === value ? 'bg-surface text-ink shadow-sm dark:bg-line' : 'text-muted hover:text-ink'
           }`}
         >

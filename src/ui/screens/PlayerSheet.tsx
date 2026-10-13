@@ -61,6 +61,7 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
           Injured: {player.injury.description}, out about {player.injury.days} more day{player.injury.days === 1 ? '' : 's'}.
         </p>
       )}
+      <CareerSummary player={player} />
       <MoraleSummary player={player} />
       <div className="mt-4">
         <PlayerActions player={player} />
@@ -137,6 +138,30 @@ function SeasonStats({ player, stats, season }: { player: Player; stats: PlayerS
         ))}
       </dl>
     </Section>
+  );
+}
+
+function CareerSummary({ player }: { player: Player }) {
+  const save = useGame((s) => s.save)!;
+  const c = player.career;
+  const hof = save.league.hallOfFame?.find((h) => h.playerId === player.id);
+  if (!c && !hof) return null;
+  const line = c
+    ? isPitcher(player)
+      ? `${c.pit.w}-${c.pit.l}, ${era(c.pit).toFixed(2)} ERA, ${c.pit.so} K`
+      : `${rate3(avg(c.bat))}, ${c.bat.hr} HR, ${c.bat.h} H`
+    : '';
+  return (
+    <div className="mt-3 rounded-xl border border-line px-3 py-2 text-sm">
+      {hof && <p className="mb-1 font-semibold text-accent">Hall of Fame · inducted {hof.season} ({hof.votePct}%)</p>}
+      {c && (
+        <p className="text-muted">
+          <span className="font-medium text-ink">Career:</span> {c.seasons} season{c.seasons === 1 ? '' : 's'} · {line} · {c.war.toFixed(1)} WAR
+          {c.awards.length > 0 && <> · {c.awards.length} award{c.awards.length > 1 ? 's' : ''}</>}
+          {c.titles > 0 && <> · {c.titles} title{c.titles > 1 ? 's' : ''}</>}
+        </p>
+      )}
+    </div>
   );
 }
 

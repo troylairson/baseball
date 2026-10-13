@@ -37,7 +37,7 @@ export function Trades() {
           />
         )}
         <h2 className="mb-2 mt-2 px-1 text-sm font-semibold uppercase tracking-wide text-muted">Teams</h2>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {save.teams.filter((t) => t.id !== team.id).map((t) => {
             const mode = teamMode(ctx, t.id);
             return (
@@ -101,9 +101,9 @@ function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { 
         <ul>
           {picks.map((id) => (
             <li key={id} className="flex items-center gap-2 border-t border-line py-2 first:border-t-0">
-              <span className="grid w-7 place-items-center text-muted"><Icon name="draft" className="size-4" /></span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{pickLabel(save.teams, parsePickId(id), pickOwner(save.league, id))}</span>
-              <button onClick={() => setPicks(picks.filter((x) => x !== id))} className="grid size-9 place-items-center rounded-full text-muted hover:bg-surface-2" aria-label="Remove pick">
+              <span className="grid grid-cols-1 w-7 place-items-center text-muted"><Icon name="draft" className="size-4" /></span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{pickLabel(save.teams, parsePickId(id), pickOwner(save.league, id), save.players)}</span>
+              <button onClick={() => setPicks(picks.filter((x) => x !== id))} className="grid grid-cols-1 size-9 place-items-center rounded-full text-muted hover:bg-surface-2" aria-label="Remove pick">
                 <Icon name="close" className="size-4" />
               </button>
             </li>
@@ -122,7 +122,7 @@ function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { 
                   <RatingBadge value={ovr} size="sm" />
                   <RatingBadge value={pot} size="sm" />
                 </button>
-                <button onClick={() => set(ids.filter((x) => x !== id))} className="grid size-9 place-items-center rounded-full text-muted hover:bg-surface-2" aria-label={`Remove ${fullName(p)}`}>
+                <button onClick={() => set(ids.filter((x) => x !== id))} className="grid grid-cols-1 size-9 place-items-center rounded-full text-muted hover:bg-surface-2" aria-label={`Remove ${fullName(p)}`}>
                   <Icon name="close" className="size-4" />
                 </button>
               </li>
@@ -137,7 +137,7 @@ function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { 
   return (
     <>
       <div className="mb-4 flex items-center gap-2">
-        <button onClick={onBack} className="grid size-10 place-items-center rounded-full hover:bg-surface-2" aria-label="Back to teams">
+        <button onClick={onBack} className="grid grid-cols-1 size-10 place-items-center rounded-full hover:bg-surface-2" aria-label="Back to teams">
           <Icon name="back" />
         </button>
         <TeamBadge team={partner} size="sm" />
@@ -146,7 +146,7 @@ function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { 
           <p className="text-xs text-muted">{evaluation.partnerMode === 'contending' ? 'Contending — values current ability' : 'Rebuilding — values youth and upside'}</p>
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {side('You give', give, setGive, 'give', givePicks, setGivePicks)}
         {side('You get', get, setGet, 'get', getPicks, setGetPicks)}
       </div>
@@ -214,7 +214,7 @@ function PickPlayers({
                     <span className={`grid size-6 shrink-0 place-items-center rounded-md border ${on ? 'border-accent bg-accent text-accent-contrast' : 'border-line'}`}>
                       {on && <Icon name="check" className="size-4" />}
                     </span>
-                    <span className="flex-1 text-sm font-medium">{pickLabel(save.teams, parsePickId(id), pickOwner(save.league, id))}</span>
+                    <span className="flex-1 text-sm font-medium">{pickLabel(save.teams, parsePickId(id), pickOwner(save.league, id), save.players)}</span>
                   </button>
                 </li>
               );

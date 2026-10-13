@@ -15,6 +15,7 @@ import { generateSchedule } from './schedule';
 import { staffCost, staffOffseason, staffRating } from './staff';
 import { refusesToResign } from './morale';
 import { closeSeasonBooks, emptyFinances, nextBudget } from './finance';
+import { addSeasonToCareers, emptyCareer, hallOfFameVote, updateSeasonRecords } from './legacy';
 import { DRAFT_ROUNDS, pickId, pickOwner } from './picks';
 import type { SeasonState } from './season';
 
@@ -159,10 +160,14 @@ export function beginOffseason(state: SeasonState): void {
   };
   league.history = [...(league.history ?? []), record];
   const byId = new Map(players.map((p) => [p.id, p]));
+  addSeasonToCareers(state);
   for (const a of awards) {
     const p = byId.get(a.playerId)!;
+    (p.career ??= emptyCareer()).awards.push(`${league.season} ${a.name}`);
     addNews(league, { kind: 'award', title: `${fullName(p)} wins the ${a.name}`, body: a.summary, playerId: p.id, teamId: a.teamId ?? undefined, mine: a.teamId === state.userTeamId });
   }
+  updateSeasonRecords(state);
+  hallOfFameVote(state);
   closeSeasonBooks(state);
   ownerReview(state);
 
@@ -194,6 +199,7 @@ function developAndRetire(state: SeasonState, rng: Rng): void {
     if (rng.chance(retirementChance(p, ovr, p.teamId === null))) {
       const wasMine = p.teamId === state.userTeamId;
       p.retired = true;
+      p.retiredSeason = league.season;
       p.teamId = null;
       p.contract = null;
       p.demand = null;

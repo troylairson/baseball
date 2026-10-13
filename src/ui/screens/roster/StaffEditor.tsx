@@ -81,7 +81,7 @@ export function StaffEditor({ userTeamId }: { userTeamId: number }) {
           <button onClick={() => void save(clonePlan(plan))} className="h-9 shrink-0 rounded-full bg-accent px-4 text-sm font-semibold text-accent-contrast">Customize</button>
         )}
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card title="Rotation" className="px-2 sm:px-4">
           <ul>{plan.rotation.map((_, index) => row({ kind: 'rotation', index }))}</ul>
         </Card>

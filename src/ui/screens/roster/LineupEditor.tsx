@@ -101,10 +101,10 @@ export function LineupEditor({ userTeamId, useDH }: { userTeamId: number; useDH:
                 </button>
                 <RatingBadge value={bat(p.id)} size="sm" />
                 <span className="flex flex-col">
-                  <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up" className="grid h-5 w-8 place-items-center text-muted disabled:opacity-20">
+                  <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up" className="grid grid-cols-1 h-5 w-8 place-items-center text-muted disabled:opacity-20">
                     <Icon name="chevron" className="size-4 -rotate-90" />
                   </button>
-                  <button onClick={() => move(i, 1)} disabled={i === lineup.length - 1} aria-label="Move down" className="grid h-5 w-8 place-items-center text-muted disabled:opacity-20">
+                  <button onClick={() => move(i, 1)} disabled={i === lineup.length - 1} aria-label="Move down" className="grid grid-cols-1 h-5 w-8 place-items-center text-muted disabled:opacity-20">
                     <Icon name="chevron" className="size-4 rotate-90" />
                   </button>
                 </span>

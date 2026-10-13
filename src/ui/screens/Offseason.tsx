@@ -95,7 +95,7 @@ function Review() {
   const champ = record?.championId != null ? teamMap.get(record.championId) : undefined;
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       {champ && (
         <section className="rounded-2xl p-5 text-white md:col-span-2" style={{ background: `linear-gradient(135deg, ${champ.primaryColor}, ${champ.secondaryColor})` }}>
           <p className="text-sm opacity-80">{record!.season} Champions</p>
@@ -178,7 +178,7 @@ function Resign() {
   const committed = save.players.filter((p) => p.teamId === team.id && (p.contract?.years ?? 0) > 0).reduce((s, p) => s + p.contract!.salary, 0);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <Card><BudgetBar used={committed} budget={payrollBudget(team)} label="Next season's commitments" /></Card>
       <Card title={`Expiring contracts (${expiring.length})`} className="px-2 sm:px-4">
         {expiring.length === 0 ? (
@@ -230,7 +230,7 @@ export function FreeAgency() {
   );
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <Card><BudgetBar used={spending(save.league, save.players, team)} budget={payrollBudget(team)} label="Total spending" /></Card>
       <Segmented
         label="Position filter"
@@ -286,8 +286,8 @@ function Draft() {
   const mine = made.filter((x) => x.teamId === team.id);
 
   return (
-    <div className="grid gap-4 md:grid-cols-[1fr_18rem]">
-      <div className="grid gap-4">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_18rem]">
+      <div className="grid grid-cols-1 gap-4">
         <div className={`rounded-2xl border p-4 ${onClock ? 'border-accent bg-accent/10' : 'border-line bg-surface'}`}>
           {pick ? (
             onClock ? (
@@ -325,7 +325,7 @@ function Draft() {
         </Card>
         <p className="text-sm text-muted">Prospect grades are your scouts' best guess — the shaded ranges on each player show how unsure they are.</p>
       </div>
-      <div className="grid content-start gap-4">
+      <div className="grid grid-cols-1 content-start gap-4">
         <Card title="Your picks">
           {mine.length === 0 ? <p className="text-sm text-muted">None yet.</p> : (
             <ul className="space-y-1 text-sm">

@@ -177,12 +177,19 @@ export function* liveGame(
     stuff: norms.stuff - BASE_NORMS.stuff, control: norms.control - BASE_NORMS.control, movement: norms.movement - BASE_NORMS.movement,
   };
   const defenseShift = (norms.defense ?? BASE_NORMS.defense) - BASE_NORMS.defense;
+  const speedShift = (norms.speed ?? BASE_NORMS.speed) - BASE_NORMS.speed;
+  // Starters' workloads are judged against the era's typical stamina too.
+  const staminaShift = (norms.stamina ?? BASE_NORMS.stamina) - BASE_NORMS.stamina;
+  const limitFor = (p: Player, starter: boolean) => pitchLimit(p, starter) - (starter ? staminaShift * 0.75 : 0);
   const batCache = new Map<number, BattingRatings>();
   const batRatings = (p: Player): BattingRatings => {
     let r = batCache.get(p.id);
     if (!r) {
       const m = moraleRatingBonus(p.morale);
-      r = { ...p.batting, contact: p.batting.contact - shift.contact + m, power: p.batting.power - shift.power + m, eye: p.batting.eye - shift.eye + m };
+      r = {
+        contact: p.batting.contact - shift.contact + m, power: p.batting.power - shift.power + m, eye: p.batting.eye - shift.eye + m,
+        speed: p.batting.speed - speedShift,
+      };
       batCache.set(p.id, r);
     }
     return r;
@@ -244,7 +251,7 @@ export function* liveGame(
   const effective = (side: Side, app: Appearance): PitchingRatings => {
     const p = side.players.get(app.playerId)!;
     const base = p.pitching ?? { stuff: 25, control: 30, movement: 25, stamina: 20 };
-    const over = Math.max(0, app.line.pitches - pitchLimit(p, app.role === 'SP'));
+    const over = Math.max(0, app.line.pitches - limitFor(p, app.role === 'SP'));
     const tired = over * 0.5 + Math.max(0, p.fatigue - 20) * 0.15 - moraleRatingBonus(p.morale);
     return {
       stuff: base.stuff - tired - shift.stuff,
@@ -300,7 +307,7 @@ export function* liveGame(
     const app = current(field);
     const p = field.players.get(app.playerId)!;
     const leash = strat(field).starterLeash;
-    const limit = pitchLimit(p, app.role === 'SP') + (app.role === 'SP' ? [-12, 0, 10][leash]! : 0);
+    const limit = limitFor(p, app.role === 'SP') + (app.role === 'SP' ? [-12, 0, 10][leash]! : 0);
     const pitches = app.line.pitches;
     const blowup = [5, 6, 7][leash]!;
     let pull: boolean;

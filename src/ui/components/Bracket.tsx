@@ -39,7 +39,7 @@ export function Bracket({ playoffs, teams, userTeamId }: { playoffs: PlayoffStat
           </div>
         </div>
       )}
-      <div className="grid gap-4 md:grid-flow-col md:auto-cols-fr">
+      <div className="grid grid-cols-1 gap-4 md:grid-flow-col md:grid-cols-none md:auto-cols-fr">
         {rounds.map((r) => (
           <div key={r} className="flex flex-col justify-around gap-3">
             {playoffs.series.filter((s) => s.round === r).map((s) => <SeriesCard key={s.id} s={s} teams={map} userTeamId={userTeamId} />)}

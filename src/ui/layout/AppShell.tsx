@@ -74,7 +74,7 @@ function TopBar({ onSettings }: { onSettings: () => void }) {
           </div>
           <div className="truncate text-xs text-muted">{formatDate(league.date)} · {phaseLabel(league.phase, seasonDone)}</div>
         </div>
-        <button onClick={onSettings} className="grid size-10 place-items-center rounded-full text-muted hover:bg-surface-2 md:hidden" aria-label="Settings">
+        <button onClick={onSettings} className="grid grid-cols-1 size-10 place-items-center rounded-full text-muted hover:bg-surface-2 md:hidden" aria-label="Settings">
           <Icon name="settings" />
         </button>
         <SimButton />
@@ -93,7 +93,7 @@ function Sidebar({ onSettings }: { onSettings: () => void }) {
   return (
     <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface px-3 py-5 md:flex">
       <div className="mb-6 flex items-center gap-2 px-3">
-        <span className="grid size-8 place-items-center rounded-lg bg-accent text-accent-contrast">◆</span>
+        <span className="grid grid-cols-1 size-8 place-items-center rounded-lg bg-accent text-accent-contrast">◆</span>
         <span className="text-lg font-bold tracking-tight">Diamond GM</span>
       </div>
       <nav className="flex flex-col gap-1" aria-label="Main">

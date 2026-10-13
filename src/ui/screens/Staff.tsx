@@ -26,7 +26,7 @@ export function Staff() {
   return (
     <>
       <PageHeader title="Staff & Scouting" subtitle="The people behind the roster" />
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card title="Spending">
           <BudgetBar used={payroll(save.players, team.id) + staffCost(league, team)} budget={payrollBudget(team)} label="Payroll + staff + scouting" />
           <p className="mt-2 text-xs text-muted">Staff & scouting: {money(staffCost(league, team))} per season.</p>

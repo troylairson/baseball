@@ -12,7 +12,7 @@ export function HistoryList({ history, teams, players, userTeamId }: { history: 
     return <p className="py-16 text-center text-sm text-muted">Finish a season to start the record books.</p>;
   }
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       {[...history].reverse().map((h) => {
         const champ = h.championId !== null ? tm.get(h.championId) : undefined;
         const mine = h.standings.find((s) => s.teamId === userTeamId);

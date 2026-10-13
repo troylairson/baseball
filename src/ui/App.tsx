@@ -26,7 +26,7 @@ export function App() {
     (id ? load(id) : Promise.resolve(false)).finally(() => setBooting(false));
   }, [load]);
 
-  if (booting) return <div className="grid min-h-dvh place-items-center text-muted">Loading…</div>;
+  if (booting) return <div className="grid grid-cols-1 min-h-dvh place-items-center text-muted">Loading…</div>;
 
   return (
     <HashRouter>

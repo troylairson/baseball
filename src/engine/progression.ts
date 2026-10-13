@@ -20,7 +20,7 @@ export function developPlayer(p: Player, rng: Rng, coaching: Coaching = { hittin
   const age = p.age;
   // Share of the gap to potential closed this year.
   const growShare = age <= 21 ? 0.3 : age <= 24 ? 0.35 : age <= 27 ? 0.45 : 0;
-  const decline = age >= 31 ? (age - 30) * 0.9 : 0;
+  const decline = age >= 30 ? (age - 29) * 1.0 : 0;
 
   // A good coach speeds growth and slows decline by up to about a fifth.
   const coachMul = (rating: number) => 1 + (rating - 50) / 150;
