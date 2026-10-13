@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { contractDemand, freeAgents, isPitcher, type OffseasonStage, type Player } from '../../engine';
+import { contractDemand, freeAgents, isPitcher, refusesToResign, type OffseasonStage, type Player } from '../../engine';
 import { api, useGame, useSave, useUserTeam } from '../../state/game';
 import { BudgetBar } from '../components/BudgetBar';
 import { Card, PageHeader } from '../components/Card';
@@ -158,6 +158,7 @@ function PlayerRow({ p, userTeamId, right, onOpen }: { p: Player; userTeamId: nu
           <span className="block truncate text-xs text-muted">
             Age {p.age}
             {p.expiring === 'arbitration' && p.demand ? ` · arbitration ${money(p.demand.salary)}` : p.demand ? ` · asks ${money(p.demand.salary)} × ${p.demand.years}` : ''}
+            {p.teamId !== null && refusesToResign(p) && p.expiring === 'free-agent' ? ' · won’t re-sign' : ''}
           </span>
         </span>
         <RatingBadge value={ovr} size="sm" />

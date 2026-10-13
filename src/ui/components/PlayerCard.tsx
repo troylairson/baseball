@@ -1,6 +1,7 @@
 import { isPitcher, type Player } from '../../engine';
 import { money, fullName } from '../format';
 import { scouted, scoutedOverall } from '../scouting';
+import { MoraleChip } from './Morale';
 import { RatingBadge } from './Rating';
 
 /** Compact, tappable player row used in rosters and lists. */
@@ -22,6 +23,7 @@ export function PlayerCard({
         <span className="flex items-center gap-1.5">
           <span className="truncate font-medium">{fullName(player)}</span>
           {player.injury && <InjuryChip days={player.injury.days} />}
+          {player.teamId === userTeamId && (player.morale ?? 50) < 40 && <MoraleChip morale={player.morale} />}
         </span>
         <span className="block truncate text-xs text-muted tabular-nums">
           {statLine ?? `Age ${player.age} · ${player.bats}/${player.throws} · ${money(player.contract?.salary ?? 0)}`}

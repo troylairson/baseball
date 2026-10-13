@@ -31,6 +31,7 @@ export function Home() {
   const expiring = org.filter((p) => p.level === 'MLB' && p.contract?.years === 1);
   const division = league.divisions.find((d) => d.id === team.divisionId)!;
   const statsById = new Map(save.stats.map((s) => [s.playerId, s]));
+  const unhappy = org.filter((p) => (p.morale ?? 50) < 35).sort((a, b) => (a.morale ?? 50) - (b.morale ?? 50));
   const slumping = org
     .filter((p) => p.level === 'MLB' && !isPitcher(p))
     .map((player) => ({ player, stats: statsById.get(player.id)! }))
@@ -62,6 +63,14 @@ export function Home() {
         <ul className="-mx-2 flex flex-col">
           {league.phase === 'preseason' && (
             <Todo icon="roster" to="/play/roster" title="Review your roster" detail="Get to know your players before Opening Day." />
+          )}
+          {unhappy.length > 0 && (
+            <Todo
+              icon="alert"
+              onClick={() => openPlayer(unhappy[0]!.id)}
+              title={`${unhappy.length} unhappy player${unhappy.length > 1 ? 's' : ''}`}
+              detail={`${fullName(unhappy[0]!)}${unhappy[0]!.tradeRequested ? ' has asked for a trade' : ' is frustrated'}. Playing time, winning and fair pay help.`}
+            />
           )}
           {slumping && (
             <Todo

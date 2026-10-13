@@ -80,6 +80,10 @@ export interface Player {
   expiring?: 'arbitration' | 'free-agent' | null;
   /** Current injury; injured players can't play and sit on the injured list. */
   injury?: Injury | null;
+  /** 0–100; 50 is neutral. */
+  morale?: number;
+  /** Has asked the user to trade him. */
+  tradeRequested?: boolean;
 }
 
 export interface Injury {
@@ -279,6 +283,8 @@ export interface League {
   news?: NewsItem[];
   nextNewsId?: number;
   owner?: OwnerState;
+  /** Last date morale was updated. */
+  moraleDate?: string;
   /** Trade offers AI teams have made to the user. */
   offers?: TradeOffer[];
   nextOfferId?: number;

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useGame } from '../../state/game';
 import { engine } from '../../worker/client';
 import { PlayerActions } from './PlayerActions';
+import { MoraleSummary } from '../components/Morale';
 import { BottomSheet } from '../components/BottomSheet';
 import { RatingBadge, RatingBar } from '../components/Rating';
 import { TeamBadge } from '../components/TeamBadge';
@@ -60,6 +61,7 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
           Injured: {player.injury.description}, out about {player.injury.days} more day{player.injury.days === 1 ? '' : 's'}.
         </p>
       )}
+      <MoraleSummary player={player} />
       <div className="mt-4">
         <PlayerActions player={player} />
       </div>

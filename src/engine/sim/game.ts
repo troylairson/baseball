@@ -2,6 +2,7 @@ import { emptyBatting, emptyPitching, type BattingLine, type PitchingLine } from
 import { DEFAULT_STRATEGY, type BattingRatings, type FieldPosition, type PitchingRatings, type Player, type Team, type TeamStrategy } from '../model/types';
 import { battingOverall } from '../model/ratings';
 import { BASE_NORMS, type RatingNorms } from './norms';
+import { moraleRatingBonus } from '../season/morale';
 import type { Rng } from '../rng';
 import { defenseAt, type GamePlan, type LineupSlot } from './lineup';
 import { pitchesFor, resolvePa, type PaResult } from './pa';
@@ -180,7 +181,8 @@ export function* liveGame(
   const batRatings = (p: Player): BattingRatings => {
     let r = batCache.get(p.id);
     if (!r) {
-      r = { ...p.batting, contact: p.batting.contact - shift.contact, power: p.batting.power - shift.power, eye: p.batting.eye - shift.eye };
+      const m = moraleRatingBonus(p.morale);
+      r = { ...p.batting, contact: p.batting.contact - shift.contact + m, power: p.batting.power - shift.power + m, eye: p.batting.eye - shift.eye + m };
       batCache.set(p.id, r);
     }
     return r;
@@ -243,7 +245,7 @@ export function* liveGame(
     const p = side.players.get(app.playerId)!;
     const base = p.pitching ?? { stuff: 25, control: 30, movement: 25, stamina: 20 };
     const over = Math.max(0, app.line.pitches - pitchLimit(p, app.role === 'SP'));
-    const tired = over * 0.5 + Math.max(0, p.fatigue - 20) * 0.15;
+    const tired = over * 0.5 + Math.max(0, p.fatigue - 20) * 0.15 - moraleRatingBonus(p.morale);
     return {
       stuff: base.stuff - tired - shift.stuff,
       control: base.control - tired * 0.8 - shift.control,

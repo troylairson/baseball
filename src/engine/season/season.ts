@@ -8,6 +8,7 @@ import { rollInjuries } from '../sim/injuries';
 import { addNews } from './news';
 import { fixRoster, rosterIssues } from './roster';
 import { staffRating } from './staff';
+import { updateMorale } from './morale';
 import { maybeMakeOffer } from './trades';
 import {
   activeSeries, advanceBracket, createPlayoffs, nextSeriesGame, recordSeriesGame, roundName,
@@ -284,6 +285,7 @@ export function simDay(state: SeasonState, preplayed?: Map<number, GameResult>):
   }
   if (league.phase !== 'regular') return [];
   maintainRosters(state);
+  updateMorale(state);
   maybeMakeOffer(state, new Rng(`${state.seed}-offer-${league.date}`));
 
   const today = state.schedule.filter((g) => g.date === league.date && !g.played);

@@ -1,6 +1,6 @@
 import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
-  acceptOffer, assistantHandleStage, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  acceptOffer, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
   type SeasonState, type TeamStrategy, type TradeProposal, type AdviceAction, type GameResult, type LiveCommand, type LiveSituation,
 } from '../engine';
@@ -384,6 +384,8 @@ export function createEngineApi(db = new GameDB()) {
     // --- Offseason actions ---------------------------------------------------
 
     async resign(playerId: number): Promise<ActionResult> {
+      const p = current().state.players.find((x) => x.id === playerId);
+      if (p && refusesToResign(p)) return { ok: false, reason: `${p.firstName} ${p.lastName} won't re-sign — he's unhappy here.` };
       if (!resignPlayer(current().state, playerId)) return { ok: false, reason: 'That player cannot be re-signed now.' };
       return commit();
     },

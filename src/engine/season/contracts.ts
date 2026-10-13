@@ -59,7 +59,8 @@ export function playerValue(p: Player, contending: boolean): number {
  * yes; greedy players on bad teams prefer to test the market.
  */
 export function extensionWillingness(p: Player, teamWinPct: number): number {
-  return p.personality.loyalty + (teamWinPct - 0.5) * 60 - (p.personality.greed - 50) * 0.5;
+  const morale = ((p.morale ?? 50) - 50) * 0.5;
+  return p.personality.loyalty + (teamWinPct - 0.5) * 60 - (p.personality.greed - 50) * 0.5 + morale;
 }
 
 export const EXTENSION_THRESHOLD = 45;

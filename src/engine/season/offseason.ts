@@ -13,6 +13,7 @@ import { finalSeries } from './playoffs';
 import { fixRoster } from './roster';
 import { generateSchedule } from './schedule';
 import { staffCost, staffOffseason, staffRating } from './staff';
+import { refusesToResign } from './morale';
 import type { SeasonState } from './season';
 
 export const DRAFT_ROUNDS = 4;
@@ -258,6 +259,7 @@ export function expiringFor(state: SeasonState, teamId: number): Player[] {
 export function resignPlayer(state: SeasonState, playerId: number): boolean {
   const p = state.players.find((x) => x.id === playerId);
   if (!p || p.contract?.years !== 0 || !p.demand) return false;
+  if (p.teamId === state.userTeamId && refusesToResign(p)) return false;
   const tender = p.expiring === 'arbitration';
   p.contract = { ...p.demand };
   p.demand = null;
