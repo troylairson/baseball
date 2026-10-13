@@ -8,6 +8,7 @@ import { useOpenPlayer } from '../../hooks';
 import { scouted } from '../../scouting';
 import { statSummary, useStatsMap } from '../../stats';
 import { ChoosePlayerSheet } from './ChoosePlayerSheet';
+import { StrategyCard } from './StrategyCard';
 import { clonePlan, usePlan } from './usePlan';
 
 const ORDINAL = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
@@ -130,6 +131,7 @@ export function LineupEditor({ userTeamId, useDH }: { userTeamId: number; useDH:
         )}
       </Card>
       <p className="mt-3 text-center text-xs text-muted">Badges show batting value. Tap a name to swap in another player.</p>
+      <StrategyCard />
 
       <ChoosePlayerSheet
         open={choosing !== null}

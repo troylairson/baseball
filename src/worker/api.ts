@@ -2,7 +2,7 @@ import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
   acceptOffer, autoDraftPick, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
-  type SeasonState, type TradeProposal,
+  type SeasonState, type TeamStrategy, type TradeProposal,
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
 import {
@@ -210,6 +210,11 @@ export function createEngineApi(db = new GameDB()) {
     },
 
     // --- Roster management -------------------------------------------------
+
+    async setStrategy(strategy: TeamStrategy): Promise<ActionResult> {
+      user().strategy = strategy;
+      return commit();
+    },
 
     async setPlan(plan: SavedPlan | null): Promise<ActionResult> {
       user().plan = plan;

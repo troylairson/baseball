@@ -111,7 +111,20 @@ export interface Team {
   rotationSlot: number;
   /** Manager's saved lineup and staff; null = let the AI decide each game. */
   plan?: SavedPlan | null;
+  strategy?: TeamStrategy;
 }
+
+/** 0 = low, 1 = balanced, 2 = high for each dial. */
+export interface TeamStrategy {
+  /** Steal attempts and taking the extra base. */
+  baserunning: 0 | 1 | 2;
+  /** Sacrifice bunts in close, late spots and for weak hitters. */
+  smallBall: 0 | 1 | 2;
+  /** 0 = quick hook (pull starters early), 2 = let starters work deep. */
+  starterLeash: 0 | 1 | 2;
+}
+
+export const DEFAULT_STRATEGY: TeamStrategy = { baserunning: 1, smallBall: 1, starterLeash: 1 };
 
 /** Same shape as the sim's GamePlan; kept structural to avoid an import cycle. */
 export interface SavedPlan {

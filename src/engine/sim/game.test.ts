@@ -49,3 +49,30 @@ describe('simGame', () => {
     });
   }
 });
+
+describe('team strategy', () => {
+  const run = (strategy: import('../model/types').TeamStrategy) => {
+    let sb = 0;
+    let starterOuts = 0;
+    let pa = 0;
+    let ab = 0;
+    for (let seed = 0; seed < 150; seed++) {
+      const away = { ...input(0, false), strategy };
+      const r = simGame(away, input(1, false), false, new Rng(seed));
+      sb += r.away.batters.reduce((s, b) => s + b.line.sb + b.line.cs, 0);
+      starterOuts += r.away.pitchers[0]!.line.outs;
+      pa += r.away.batters.reduce((s, b) => s + b.line.pa, 0);
+      ab += r.away.batters.reduce((s, b) => s + b.line.ab + b.line.bb + b.line.hbp + b.line.sf, 0);
+    }
+    return { attempts: sb, starterOuts, sacs: pa - ab };
+  };
+  const low = run({ baserunning: 0, smallBall: 0, starterLeash: 0 });
+  const high = run({ baserunning: 2, smallBall: 2, starterLeash: 2 });
+
+  it('aggressive baserunning attempts more steals', () => expect(high.attempts).toBeGreaterThan(low.attempts * 1.8));
+  it('small ball lays down sacrifice bunts', () => {
+    expect(low.sacs).toBe(0);
+    expect(high.sacs).toBeGreaterThan(20);
+  });
+  it('a long leash lets starters work deeper', () => expect(high.starterOuts).toBeGreaterThan(low.starterOuts * 1.1));
+});

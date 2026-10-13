@@ -1,5 +1,6 @@
 import { emptyBatting, emptyPitching, type BattingLine, type PitchingLine } from '../model/stats';
-import type { BattingRatings, FieldPosition, PitchingRatings, Player, Team } from '../model/types';
+import { DEFAULT_STRATEGY, type BattingRatings, type FieldPosition, type PitchingRatings, type Player, type Team, type TeamStrategy } from '../model/types';
+import { battingOverall } from '../model/ratings';
 import { BASE_NORMS, type RatingNorms } from './norms';
 import type { Rng } from '../rng';
 import { defenseAt, type GamePlan, type LineupSlot } from './lineup';
@@ -7,6 +8,8 @@ import { pitchesFor, resolvePa, type PaResult } from './pa';
 
 export interface TeamGameInput {
   team: Team;
+  /** Defaults to the team's saved strategy (or balanced). */
+  strategy?: TeamStrategy;
   /** Active roster (MLB level). */
   roster: Player[];
   plan: GamePlan;
@@ -191,6 +194,8 @@ export function simGame(
     };
   };
 
+  const strat = (side: Side): TeamStrategy => side.input.strategy ?? side.input.team.strategy ?? DEFAULT_STRATEGY;
+
   const used = (side: Side) => new Set(side.pitchers.map((a) => a.playerId));
 
   /** Choose and bring in a reliever. Returns false if nobody is available. */
@@ -234,15 +239,17 @@ export function simGame(
   const managePitcher = (field: Side, inning: number, lead: number, outs: number, startOfInning: boolean) => {
     const app = current(field);
     const p = field.players.get(app.playerId)!;
-    const limit = pitchLimit(p, app.role === 'SP');
+    const leash = strat(field).starterLeash;
+    const limit = pitchLimit(p, app.role === 'SP') + (app.role === 'SP' ? [-12, 0, 10][leash]! : 0);
     const pitches = app.line.pitches;
+    const blowup = [5, 6, 7][leash]!;
     let pull: boolean;
     if (app.role === 'SP') {
       if (startOfInning) {
-        pull = pitches >= limit - 8 || app.line.r >= 6 || (app.line.r >= 5 && pitches >= 60)
+        pull = pitches >= limit - 8 || app.line.r >= blowup || (app.line.r >= blowup - 1 && pitches >= 60)
           || (inning >= 8 && lead >= 0 && lead <= 3 && pitches >= limit * 0.8);
       } else {
-        pull = pitches >= limit + 12 || app.line.r >= 7;
+        pull = pitches >= limit + 12 || app.line.r >= blowup + 1;
       }
     } else if (startOfInning) {
       const outsThisOuting = app.line.outs;
@@ -300,7 +307,7 @@ export function simGame(
         if (onFirst && !bases[1] && outs < 2) {
           const runner = bat.players.get(onFirst.id)!;
           const speed = runner.batting.speed;
-          if (speed > 40 && rng.chance((speed - 40) * 0.012)) {
+          if (speed > 40 && rng.chance((speed - 40) * 0.012 * [0.45, 1, 1.7][strat(bat).baserunning]!)) {
             const line = bat.batters.get(onFirst.id)!.line;
             if (rng.chance(0.72 + (speed - 55) * 0.007 - (field.catcherArm - 50) * 0.004)) {
               line.sb++;
@@ -321,6 +328,49 @@ export function simGame(
         const slot = bat.order[bat.batterIdx]!;
         bat.batterIdx = (bat.batterIdx + 1) % bat.order.length;
         const batter = bat.players.get(slot.playerId)!;
+
+        // Sacrifice bunt: runner(s) on, nobody out, weak bat or a close late game.
+        const smallBall = strat(bat).smallBall;
+        if (smallBall > 0 && outs === 0 && bases[0] && !bases[2]) {
+          const weak = slot.position === 'P' || battingOverall(batter.batting) < 40;
+          const closeLate = inning >= 7 && Math.abs(bat.runs - field.runs) <= 1;
+          if ((weak || closeLate) && rng.chance(smallBall === 2 ? 0.75 : 0.3)) {
+            const b = slot.line;
+            b.pa++;
+            app.line.bf++;
+            app.line.pitches += 2;
+            const roll = rng.next();
+            const who = name(bat, batter.id);
+            if (roll < 0.75) {
+              outs++;
+              app.line.outs++;
+              if (bases[1]) bases[2] = bases[1];
+              bases[1] = bases[0];
+              bases[0] = null;
+              say(`${who} lays down a sacrifice bunt.`);
+            } else if (roll < 0.85) {
+              b.ab++;
+              b.h++;
+              app.line.h++;
+              bat.hits++;
+              if (bases[1]) bases[2] = bases[1];
+              bases[1] = bases[0];
+              bases[0] = { id: batter.id, pitcherId: app.playerId, earned: true };
+              say(`${who} beats out a bunt for a hit.`);
+            } else {
+              b.ab++;
+              outs++;
+              app.line.outs++;
+              // Lead runner is cut down; batter takes first.
+              if (bases[1]) {
+                bases[1] = bases[0];
+              }
+              bases[0] = { id: batter.id, pitcherId: app.playerId, earned: true };
+              say(`${who} bunts into a force out.`);
+            }
+            continue;
+          }
+        }
         const result: PaResult = resolvePa(
           { bat: batRatings(batter), bats: batter.bats, pitch: effective(field, app), throws: pitcher.throws, defense: field.defense - defenseShift },
           rng,
@@ -391,23 +441,24 @@ export function simGame(
             if (result === '3B') b.t++;
             say(`${who} ${result === '1B' ? 'singles' : result === '2B' ? 'doubles' : 'triples'} to ${dir}.`);
             const spd = (r: Runner) => bat.players.get(r.id)!.batting.speed;
+            const extraBase = [-0.08, 0, 0.07][strat(bat).baserunning]!;
             const [r1, r2, r3] = bases;
             bases[0] = bases[1] = bases[2] = null;
             if (r3) score(r3, batter.id);
             if (result === '1B') {
               if (r2) {
-                if (rng.chance(0.6 + (spd(r2) - 50) * 0.01)) score(r2, batter.id);
+                if (rng.chance(0.6 + extraBase + (spd(r2) - 50) * 0.01)) score(r2, batter.id);
                 else bases[2] = r2;
               }
               if (r1) {
-                if (!bases[2] && rng.chance(0.27 + (spd(r1) - 50) * 0.008)) bases[2] = r1;
+                if (!bases[2] && rng.chance(0.27 + extraBase + (spd(r1) - 50) * 0.008)) bases[2] = r1;
                 else bases[1] = r1;
               }
               bases[0] = newRunner();
             } else if (result === '2B') {
               if (r2) score(r2, batter.id);
               if (r1) {
-                if (rng.chance(0.42 + (spd(r1) - 50) * 0.01)) score(r1, batter.id);
+                if (rng.chance(0.42 + extraBase + (spd(r1) - 50) * 0.01)) score(r1, batter.id);
                 else bases[2] = r1;
               }
               bases[1] = newRunner();
