@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateLeague } from '../generate/league';
 import { Rng } from '../rng';
-import { resolvePlan } from '../sim/lineup';
+import { platoonLineup, resolvePlan } from '../sim/lineup';
 import { ensureCareerDefaults } from './career';
 import { userLog } from './gamelog';
 import { generateSchedule } from './schedule';
@@ -82,6 +82,29 @@ describe('trends', () => {
 
     expect(applyTrendAction(s, { kind: 'strategy', patch: { starterLeash: 2 } }).ok).toBe(true);
     expect(team.strategy!.starterLeash).toBe(2);
+  });
+
+  it('platoons a hitter against same-side starters', () => {
+    const s = played(15, 25);
+    const team = s.teams.find((t) => t.id === 0)!;
+    const useDH = s.league.settings.designatedHitter;
+    const hitter = resolvePlan(activeRoster(s.players, 0), team.plan, useDH).lineup.find((x) => x.position !== 'P')!.playerId;
+    expect(applyTrendAction(s, { kind: 'platoon', playerId: hitter, hand: 'L' }).ok).toBe(true);
+    expect(team.platoon!.L).toContain(hitter);
+    const plan = resolvePlan(activeRoster(s.players, 0), team.plan, useDH);
+    const swapped = platoonLineup(plan, activeRoster(s.players, 0), team.platoon!.L);
+    expect(swapped.lineup.some((x) => x.playerId === hitter)).toBe(false);
+    expect(swapped.lineup).toHaveLength(plan.lineup.length);
+    expect(applyTrendAction(s, { kind: 'unplatoon', playerId: hitter }).ok).toBe(true);
+    expect(team.platoon!.L).not.toContain(hitter);
+  });
+
+  it('flags a tense clubhouse with a way to act', () => {
+    const s = played(16, 20);
+    s.teams.find((t) => t.id === 0)!.chemistry = 25;
+    const t = detectTrends(s).find((x) => x.id === 'chemistry');
+    expect(t?.tone).toBe('bad');
+    expect(t!.suggestions.length).toBeGreaterThan(0);
   });
 
   it('is quiet outside the regular season', () => {

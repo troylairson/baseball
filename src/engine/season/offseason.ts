@@ -15,6 +15,7 @@ import { fixRoster } from './roster';
 import { generateSchedule } from './schedule';
 import { staffCost, staffOffseason, staffRating } from './staff';
 import { refusesToResign } from './morale';
+import { snapshotCores } from './chemistry';
 import { closeSeasonBooks, emptyFinances, nextBudget } from './finance';
 import { addSeasonToCareers, emptyCareer, hallOfFameVote, updateSeasonRecords } from './legacy';
 import { DRAFT_ROUNDS, pickId, pickOwner } from './picks';
@@ -177,6 +178,7 @@ export function beginOffseason(state: SeasonState): void {
     const p = byId.get(s.playerId);
     if (p && (s.bat.pa >= 130 || s.pit.outs >= 150)) p.experience = (p.experience ?? 0) + 1;
   }
+  snapshotCores(state);
   league.phase = 'offseason';
   league.offseason = 'review';
   league.date = `${league.season}-11-01`;

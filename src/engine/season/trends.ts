@@ -1,7 +1,8 @@
 import { isPitcher, overall, pitchingOverall } from '../model/ratings';
 import { addLine, avg, emptyBatting, era, ipString, rate3 } from '../model/stats';
-import { DEFAULT_STRATEGY, type Player, type TeamStrategy } from '../model/types';
+import { DEFAULT_STRATEGY, type FieldPosition, type Hand, type Player, type TeamStrategy } from '../model/types';
 import { autoPlan, fitAt, resolvePlan, type GamePlan } from '../sim/lineup';
+import { chemistryFactors, chemistryLabel, isBadApple } from './chemistry';
 import { userLog, type BatLog, type PitLog, type TeamLog } from './gamelog';
 import { activeRoster, type SeasonState } from './season';
 
@@ -15,6 +16,8 @@ export type TrendAction =
   | { kind: 'strategy'; patch: Partial<TeamStrategy> }
   | { kind: 'callUp'; upId: number; downId: number }
   | { kind: 'autoLineup' }
+  | { kind: 'platoon'; playerId: number; hand: Hand }
+  | { kind: 'unplatoon'; playerId: number }
   | { kind: 'goto'; path: string };
 
 export interface TrendSuggestion {
@@ -68,7 +71,21 @@ function lineupIndex(plan: GamePlan, id: number): number {
 
 // ---------------------------------------------------------------------------
 
-function hitterTrends(p: Player, logs: BatLog[], state: SeasonState, plan: GamePlan): Trend[] {
+/** A AAA bat who can play his position and would hit at least as well. */
+function minorLeagueBat(state: SeasonState, p: Player): Player | undefined {
+  return state.players
+    .filter((x) => x.teamId === state.userTeamId && x.level === 'AAA' && !x.injury && !isPitcher(x)
+      && (p.position === 'DH' || x.positionRatings[p.position as FieldPosition] !== undefined))
+    .filter((x) => overall(x) >= overall(p) - 1)
+    .sort((a, b) => overall(b) - overall(a))[0];
+}
+
+const shortDate = (d: string) => {
+  const [, m, day] = d.split('-').map(Number);
+  return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m! - 1]} ${day}`;
+};
+
+function hitterTrends(p: Player, logs: BatLog[], state: SeasonState, plan: GamePlan, teamLogs: TeamLog[]): Trend[] {
   const out: Trend[] = [];
   if (logs.length < 5) return out;
   const ctx = batContext(p, state);
@@ -115,7 +132,7 @@ function hitterTrends(p: Player, logs: BatLog[], state: SeasonState, plan: GameP
         tone: 'bad',
         playerId: p.id,
         title: `${name(p)} is slumping`,
-        detail: `Hitting ${rate3(a10)} (${last.h}-for-${last.ab}) over his last 10 games.`,
+        detail: `Hitting ${rate3(a10)} (${last.h}-for-${last.ab}) over his last 10 games, since ${shortDate(logs.at(-10)?.d ?? logs[0]!.d)}.`,
         context: `${contextLine[0]!.toUpperCase()}${contextLine.slice(1)}. ${
           decline
             ? `His strikeout rate has jumped to ${pct(k10)} (${pct(ctx.seasonK)} on the season) — something is off.`
@@ -125,6 +142,10 @@ function hitterTrends(p: Player, logs: BatLog[], state: SeasonState, plan: GameP
           ? [
               ...(starting ? [{ label: 'Rest him', action: { kind: 'bench', playerId: p.id } as TrendAction }] : []),
               ...(starting && slot <= 4 ? [{ label: 'Drop him to 7th', action: { kind: 'battingOrder', playerId: p.id, slot: 6 } as TrendAction }] : []),
+              ...(() => {
+                const up = minorLeagueBat(state, p);
+                return up ? [{ label: `Call up ${name(up)} (AAA)`, action: { kind: 'callUp', upId: up.id, downId: p.id } as TrendAction }] : [];
+              })(),
             ]
           : [
               { label: 'Ride it out' },
@@ -147,6 +168,34 @@ function hitterTrends(p: Player, logs: BatLog[], state: SeasonState, plan: GameP
             : [],
         priority: 30,
       });
+    }
+  }
+
+  // Platoon split: results in games against left- vs right-handed starters.
+  const hand = new Map(teamLogs.map((t) => [t.g, t.oppHand]));
+  const split = (h: Hand) => sumBat(logs.filter((l) => hand.get(l.g) === h));
+  const team = state.teams.find((t) => t.id === state.userTeamId)!;
+  const platooned = (['L', 'R'] as const).find((h) => team.platoon?.[h].includes(p.id));
+  if (starting && !platooned && p.bats !== 'S') {
+    const same = p.bats as Hand;
+    const vsSame = split(same);
+    const vsOther = split(same === 'L' ? 'R' : 'L');
+    if (vsSame.ab >= 40 && vsOther.ab >= 40) {
+      const aSame = vsSame.h / vsSame.ab;
+      const aOther = vsOther.h / vsOther.ab;
+      if (aSame <= 0.2 && aOther - aSame >= 0.08) {
+        const word = same === 'L' ? 'lefties' : 'righties';
+        out.push({
+          id: `platoon-${p.id}`,
+          tone: 'bad',
+          playerId: p.id,
+          title: `${name(p)} can't solve ${word}`,
+          detail: `${rate3(aSame)} in games against ${same === 'L' ? 'left' : 'right'}-handed starters, ${rate3(aOther)} against ${same === 'L' ? 'righties' : 'lefties'}.`,
+          context: `A ${same === 'L' ? 'left' : 'right'}-handed hitter facing same-side pitching. A platoon partner could take those at-bats.`,
+          suggestions: [{ label: `Sit him against ${word}`, action: { kind: 'platoon', playerId: p.id, hand: same } }],
+          priority: 42,
+        });
+      }
     }
   }
 
@@ -354,6 +403,30 @@ function teamTrends(state: SeasonState, logs: TeamLog[]): Trend[] {
     }
   }
 
+  // Home and road.
+  const sided = logs.filter((l) => l.home !== undefined);
+  const homeG = sided.filter((l) => l.home === 1);
+  const roadG = sided.filter((l) => l.home === 0);
+  if (homeG.length >= 20 && roadG.length >= 20) {
+    const hw = homeG.filter((l) => l.rf > l.ra).length;
+    const rw = roadG.filter((l) => l.rf > l.ra).length;
+    const gap = hw / homeG.length - rw / roadG.length;
+    if (Math.abs(gap) >= 0.22) {
+      const roadWorse = gap > 0;
+      out.push({
+        id: 'home-road',
+        tone: 'info',
+        title: roadWorse ? `${rw}-${roadG.length - rw} on the road` : `${hw}-${homeG.length - hw} at home`,
+        detail: `${hw}-${homeG.length - hw} at home, ${rw}-${roadG.length - rw} on the road.`,
+        context: roadWorse
+          ? 'Big home/road gaps usually even out; the schedule ahead may be friendlier.'
+          : 'Struggling at home costs you at the gate, too: fans notice.',
+        suggestions: [],
+        priority: 24,
+      });
+    }
+  }
+
   // One-run games.
   const close = logs.filter((l) => Math.abs(l.rf - l.ra) === 1);
   const cw = close.filter((l) => l.rf > l.ra).length;
@@ -371,6 +444,43 @@ function teamTrends(state: SeasonState, logs: TeamLog[]): Trend[] {
   return out;
 }
 
+function chemistryTrends(state: SeasonState): Trend[] {
+  const team = state.teams.find((t) => t.id === state.userTeamId)!;
+  const chem = team.chemistry;
+  if (chem === undefined) return [];
+  const factors = chemistryFactors(state, team.id);
+  const label = chemistryLabel(chem);
+  if (label === 'Tense' || label === 'Toxic') {
+    const apples = state.players.filter((p) => p.teamId === team.id && p.level === 'MLB' && isBadApple(p));
+    const worst = factors.filter((f) => f.value < 0).sort((a, b) => a.value - b.value).slice(0, 2);
+    return [{
+      id: 'chemistry',
+      tone: 'bad',
+      title: `The clubhouse is ${label.toLowerCase()}`,
+      detail: `Team chemistry is ${chem}/100, which costs everyone a little on the field.`,
+      context: worst.length ? worst.map((f) => f.label).join('. ') + '.' : undefined,
+      suggestions: [
+        ...(apples[0] ? [{ label: `Shop ${name(apples[0])}`, action: { kind: 'goto', path: '/play/trades' } as TrendAction }] : []),
+        { label: 'See the clubhouse', action: { kind: 'goto', path: '/play/office' } },
+      ],
+      priority: label === 'Toxic' ? 56 : 44,
+    }];
+  }
+  if (label === 'Great') {
+    const best = factors.filter((f) => f.value > 0).sort((a, b) => b.value - a.value)[0];
+    return [{
+      id: 'chemistry',
+      tone: 'good',
+      title: 'Great clubhouse chemistry',
+      detail: `Team chemistry is ${chem}/100, a small lift for everyone on the field.`,
+      context: best ? `${best.label}.` : undefined,
+      suggestions: [],
+      priority: 18,
+    }];
+  }
+  return [];
+}
+
 /** Everything notable about the user's team right now, most important first. */
 export function detectTrends(state: SeasonState): Trend[] {
   if (state.league.phase !== 'regular') return [];
@@ -381,9 +491,10 @@ export function detectTrends(state: SeasonState): Trend[] {
   const trends: Trend[] = [];
   for (const p of active) {
     if (isPitcher(p)) trends.push(...pitcherTrends(p, log.pit[p.id] ?? [], state, plan));
-    else trends.push(...hitterTrends(p, log.bat[p.id] ?? [], state, plan));
+    else trends.push(...hitterTrends(p, log.bat[p.id] ?? [], state, plan, log.team));
   }
   trends.push(...teamTrends(state, log.team));
+  trends.push(...chemistryTrends(state));
   trends.sort((a, b) => b.priority - a.priority);
   // The same team-wide fix shouldn't be offered on several cards.
   const offered = new Set<string>();
@@ -476,6 +587,21 @@ export function applyTrendAction(state: SeasonState, action: TrendAction): Trend
     case 'autoLineup':
       team.plan = { ...plan, lineup: autoPlan(active, useDH).lineup };
       return { ok: true, message: 'Lineup reset to the best automatic order.' };
+    case 'platoon': {
+      const p = byId.get(action.playerId);
+      if (!p) return { ok: false, reason: 'That player is gone.' };
+      const platoon = team.platoon ?? { L: [], R: [] };
+      team.platoon = {
+        L: platoon.L.filter((id) => id !== p.id).concat(action.hand === 'L' ? [p.id] : []),
+        R: platoon.R.filter((id) => id !== p.id).concat(action.hand === 'R' ? [p.id] : []),
+      };
+      return { ok: true, message: `${p.lastName} will sit against ${action.hand === 'L' ? 'left' : 'right'}-handed starters.` };
+    }
+    case 'unplatoon': {
+      const p = byId.get(action.playerId);
+      if (team.platoon) team.platoon = { L: team.platoon.L.filter((id) => id !== action.playerId), R: team.platoon.R.filter((id) => id !== action.playerId) };
+      return { ok: true, message: `${p?.lastName ?? 'He'} plays every day again.` };
+    }
     case 'goto':
       return { ok: false, reason: 'Navigation is handled by the app.' };
   }

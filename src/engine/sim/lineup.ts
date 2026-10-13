@@ -47,6 +47,26 @@ function bestAt(pos: FieldPosition | 'DH', hitters: Player[], used: Set<number>)
   return best;
 }
 
+/**
+ * Sit platooned hitters against a starter of the hand they struggle with:
+ * each is replaced at his position by the best available bench bat.
+ */
+export function platoonLineup(plan: GamePlan, roster: Player[], sit: number[]): GamePlan {
+  if (!sit.length) return plan;
+  const sitting = new Set(sit);
+  if (!plan.lineup.some((s) => sitting.has(s.playerId))) return plan;
+  const hitters = roster.filter((p) => p.position !== 'SP' && p.position !== 'RP' && !sitting.has(p.id));
+  const used = new Set(plan.lineup.map((s) => s.playerId));
+  const lineup = plan.lineup.map((slot) => {
+    if (!sitting.has(slot.playerId) || slot.position === 'P') return slot;
+    const sub = bestAt(slot.position, hitters, used);
+    if (!sub) return slot;
+    used.add(sub.id);
+    return { ...slot, playerId: sub.id };
+  });
+  return { ...plan, lineup };
+}
+
 const pitchVal = (p: Player, starter: boolean) => (p.pitching ? pitchingOverall(p.pitching, starter) : 0);
 
 /** Build an automatic lineup and pitching staff from a team's active roster. */

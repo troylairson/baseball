@@ -9,6 +9,7 @@ import { scoutedOverall } from '../scouting';
 import { payroll, payrollBudget, spending } from '../teams';
 import { BudgetBar } from '../components/BudgetBar';
 import { FinancesCard } from '../components/FinancesCard';
+import { ClubhouseCard } from '../components/ClubhouseCard';
 
 const STATUS_LABEL = { 'pre-arb': 'Pre-arb', arbitration: 'Arb', 'free-agent': 'FA' } as const;
 
@@ -43,6 +44,8 @@ export function FrontOffice() {
         </Card>
 
         <FinancesCard team={team} />
+
+        <ClubhouseCard team={team} />
 
         <Card title="Tools">
           <ul className="-mx-2">

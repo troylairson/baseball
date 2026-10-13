@@ -2,7 +2,7 @@ import { addLine, emptyBatting, emptyPitching, type PlayerSeasonStats } from '..
 import type { League, Player, ScheduledGame, Team } from '../model/types';
 import { Rng } from '../rng';
 import { simGame, type GameResult, type TeamGameInput } from '../sim/game';
-import { resolvePlan, type GamePlan } from '../sim/lineup';
+import { platoonLineup, resolvePlan, type GamePlan } from '../sim/lineup';
 import { computeNorms, type RatingNorms } from '../sim/norms';
 import { rollInjuries } from '../sim/injuries';
 import { addNews } from './news';
@@ -170,14 +170,27 @@ export function startPlayoffs(state: SeasonState): void {
   for (const p of state.players) p.fatigue = 0;
 }
 
+/** Both sides' inputs, with platoon hitters sat against the opposing starter's hand. */
+function matchupInputs(state: SeasonState, away: Team, home: Team): [TeamGameInput, TeamGameInput] {
+  const a = teamInput(state, away);
+  const h = teamInput(state, home);
+  const hand = (input: TeamGameInput) => input.roster.find((p) => p.id === input.starterId)?.throws ?? 'R';
+  const platoon = (input: TeamGameInput, oppHand: 'L' | 'R'): TeamGameInput => {
+    const sit = input.team.platoon?.[oppHand] ?? [];
+    return sit.length ? { ...input, plan: platoonLineup(input.plan, input.roster, sit) } : input;
+  };
+  return [platoon(a, hand(h)), platoon(h, hand(a))];
+}
+
 function playGame(state: SeasonState, game: ScheduledGame, teams: Map<number, Team>, preplayed?: Map<number, GameResult>): PlayedGame {
   const { league } = state;
   const home = teams.get(game.homeId)!;
   const away = teams.get(game.awayId)!;
   const withLog = home.id === state.userTeamId || away.id === state.userTeamId;
+  const inputs = preplayed?.has(game.id) ? null : matchupInputs(state, away, home);
   const result = preplayed?.get(game.id) ?? simGame(
-    teamInput(state, away),
-    teamInput(state, home),
+    inputs![0],
+    inputs![1],
     league.settings.designatedHitter,
     new Rng(`${state.seed}-${league.season}-${game.id}`),
     withLog,
@@ -358,10 +371,11 @@ export function prepareLiveGame(state: SeasonState): LiveSetup | null {
   if (!game) return null;
   const teams = new Map(state.teams.map((t) => [t.id, t]));
   maintainRosters(state);
+  const [away, home] = matchupInputs(state, teams.get(game.awayId)!, teams.get(game.homeId)!);
   return {
     game,
-    away: teamInput(state, teams.get(game.awayId)!),
-    home: teamInput(state, teams.get(game.homeId)!),
+    away,
+    home,
     useDH: league.settings.designatedHitter,
     rng: new Rng(`${state.seed}-${league.season}-${game.id}`),
     norms: (state.norms ??= computeNorms(state.players)),

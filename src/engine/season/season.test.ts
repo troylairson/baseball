@@ -84,7 +84,8 @@ describe('season simulation', () => {
   it('spreads wins realistically', () => {
     const wins = state.teams.map((t) => t.wins);
     expect(Math.max(...wins)).toBeLessThan(115);
-    expect(Math.min(...wins)).toBeGreaterThan(45);
+    // Real worst records reach the low 40s (2024 White Sox: 41-121).
+    expect(Math.min(...wins)).toBeGreaterThan(40);
   });
 
   it('uses starters for most innings', () => {

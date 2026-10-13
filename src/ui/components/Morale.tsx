@@ -1,4 +1,4 @@
-import { moraleFactors, moraleLabel, type Player } from '../../engine';
+import { clubhouseRole, moraleFactors, moraleLabel, type Player } from '../../engine';
 import { useSave } from '../../state/game';
 
 const TONE = {
@@ -24,6 +24,8 @@ export function MoraleSummary({ player }: { player: Player }) {
         <span className="font-medium">Morale</span>
         <MoraleChip morale={player.morale} />
         {player.tradeRequested && <span className="text-xs font-semibold text-danger">Trade requested</span>}
+        {clubhouseRole(player) === 'leader' && <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-accent">Clubhouse leader</span>}
+        {clubhouseRole(player) === 'bad-apple' && <span className="rounded bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-danger">Troublemaker</span>}
       </div>
       {factors.length > 0 && (
         <ul className="mt-1 space-y-0.5 text-xs text-muted">

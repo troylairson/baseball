@@ -127,6 +127,12 @@ export interface Team {
   /** Index into TICKET_LEVELS (0 bargain … 4 premium). */
   ticketPrice?: number;
   finances?: import('../season/finance').SeasonFinances;
+  /** Hitters who sit against left- (L) or right-handed (R) starting pitchers. */
+  platoon?: { L: number[]; R: number[] };
+  /** 0–100 clubhouse chemistry; 50 is neutral. */
+  chemistry?: number;
+  /** Active players at the end of last season, to measure turnover. */
+  core?: number[];
   lastFinances?: import('../season/finance').SeasonFinances;
 }
 

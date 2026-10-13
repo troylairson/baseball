@@ -8,6 +8,7 @@ import { engine } from '../../worker/client';
 import { PlayerActions } from './PlayerActions';
 import { MoraleSummary } from '../components/Morale';
 import { RecentForm } from '../components/RecentForm';
+import { PlatoonControl } from '../components/PlatoonControl';
 import { BottomSheet } from '../components/BottomSheet';
 import { RatingBadge, RatingBar } from '../components/Rating';
 import { TeamBadge } from '../components/TeamBadge';
@@ -64,6 +65,7 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
       )}
       <CareerSummary player={player} />
       <MoraleSummary player={player} />
+      <PlatoonControl player={player} />
       <div className="mt-4">
         <PlayerActions player={player} />
       </div>

@@ -33,3 +33,4 @@ export * from './season/trends';
 export * from './generate/freeAgents';
 export * from './generate/rosterFile';
 export * from './generate/mlb';
+export * from './season/chemistry';

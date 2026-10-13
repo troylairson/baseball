@@ -2,6 +2,7 @@ import { battingOverall, isPitcher, overall, pitchingOverall } from '../model/ra
 import type { Player } from '../model/types';
 import { contractDemand, contractStatus } from './contracts';
 import { addNews } from './news';
+import { NEUTRAL_CHEMISTRY, updateChemistry } from './chemistry';
 import type { SeasonState } from './season';
 
 export interface MoraleFactor {
@@ -63,6 +64,11 @@ export function moraleFactors(p: Player, state: Pick<SeasonState, 'teams' | 'pla
     }
   }
   if (p.personality.loyalty >= 65) factors.push({ label: 'Loyal to the club', value: 6 });
+  if (p.level === 'MLB') {
+    const chem = team.chemistry ?? NEUTRAL_CHEMISTRY;
+    if (chem >= 70) factors.push({ label: 'Loves this clubhouse', value: 5 });
+    else if (chem <= 28) factors.push({ label: 'Toxic clubhouse', value: -4 });
+  }
   return factors;
 }
 
@@ -92,6 +98,7 @@ export function updateMorale(state: SeasonState, force = false): void {
   const { league } = state;
   if (!force && league.moraleDate && daysBetween(league.moraleDate, league.date) < DAYS_BETWEEN_UPDATES) return;
   league.moraleDate = league.date;
+  updateChemistry(state);
   for (const p of state.players) {
     if (p.teamId === null || p.retired) continue;
     const target = moraleTarget(p, state);

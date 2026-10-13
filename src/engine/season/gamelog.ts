@@ -44,6 +44,8 @@ export interface TeamLog {
   bpEr: number;
   /** Opposing starter's throwing hand. */
   oppHand: Hand;
+  /** 1 = home game (absent in logs recorded before home/road splits). */
+  home?: 0 | 1;
 }
 
 export interface UserGameLog {
@@ -94,5 +96,5 @@ export function recordUserGame(league: League, userTeamId: number, game: Schedul
     }
   });
   const oppStarter = theirs.pitchers[0] ? players.get(theirs.pitchers[0].playerId) : undefined;
-  log.team.push({ g: game.id, d: game.date, vs, rf: mine.runs, ra: theirs.runs, spOuts, spEr, bpOuts, bpEr, oppHand: oppStarter?.throws ?? 'R' });
+  log.team.push({ g: game.id, d: game.date, vs, rf: mine.runs, ra: theirs.runs, spOuts, spEr, bpOuts, bpEr, oppHand: oppStarter?.throws ?? 'R', home: home ? 1 : 0 });
 }

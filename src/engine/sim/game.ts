@@ -3,6 +3,7 @@ import { DEFAULT_STRATEGY, type BattingRatings, type FieldPosition, type Pitchin
 import { battingOverall } from '../model/ratings';
 import { BASE_NORMS, type RatingNorms } from './norms';
 import { moraleRatingBonus } from '../season/morale';
+import { chemistryRatingBonus } from '../season/chemistry';
 import type { Rng } from '../rng';
 import { defenseAt, type GamePlan, type LineupSlot } from './lineup';
 import { pitchesFor, resolvePa, type PaResult } from './pa';
@@ -181,11 +182,12 @@ export function* liveGame(
   // Starters' workloads are judged against the era's typical stamina too.
   const staminaShift = (norms.stamina ?? BASE_NORMS.stamina) - BASE_NORMS.stamina;
   const limitFor = (p: Player, starter: boolean) => pitchLimit(p, starter) - (starter ? staminaShift * 0.75 : 0);
+  const chemFor = (p: Player) => chemistryRatingBonus(p.teamId === homeIn.team.id ? homeIn.team : p.teamId === awayIn.team.id ? awayIn.team : {});
   const batCache = new Map<number, BattingRatings>();
   const batRatings = (p: Player): BattingRatings => {
     let r = batCache.get(p.id);
     if (!r) {
-      const m = moraleRatingBonus(p.morale);
+      const m = moraleRatingBonus(p.morale) + chemFor(p);
       r = {
         contact: p.batting.contact - shift.contact + m, power: p.batting.power - shift.power + m, eye: p.batting.eye - shift.eye + m,
         speed: p.batting.speed - speedShift,
@@ -252,7 +254,7 @@ export function* liveGame(
     const p = side.players.get(app.playerId)!;
     const base = p.pitching ?? { stuff: 25, control: 30, movement: 25, stamina: 20 };
     const over = Math.max(0, app.line.pitches - limitFor(p, app.role === 'SP'));
-    const tired = over * 0.5 + Math.max(0, p.fatigue - 20) * 0.15 - moraleRatingBonus(p.morale);
+    const tired = over * 0.5 + Math.max(0, p.fatigue - 20) * 0.15 - moraleRatingBonus(p.morale) - chemFor(p);
     return {
       stuff: base.stuff - tired - shift.stuff,
       control: base.control - tired * 0.8 - shift.control,
