@@ -6,6 +6,10 @@ A mobile-first, browser-based baseball management sim inspired by *Out of the Pa
 
 Diamond GM is a Progressive Web App: open it once in a browser and use "Add to Home Screen" / "Install app". It then works fully offline. Careers live in the browser's IndexedDB; use **Settings → Export career file** to back one up or move it to another device, and **Import career file** on the start screen to load it.
 
+## Deployment
+
+Every push to `master` builds, tests and publishes the app to GitHub Pages via `.github/workflows/deploy.yml` (one-time setup: repo **Settings → Pages → Source: GitHub Actions**). It's served at `https://<owner>.github.io/<repo>/`; relative asset paths and hash-based routing mean no extra configuration is needed.
+
 ## Getting started
 
 ```bash
