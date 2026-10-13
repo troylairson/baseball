@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { contractDemand, freeAgents, refusesToResign, type OffseasonStage, type Player } from '../../engine';
+import { contractDemand, freeAgents, MARKET_ROUNDS, refusesToResign, type OffseasonStage, type Player } from '../../engine';
+import { MarketPanel, OfferSheet } from './Market';
 import { api, useGame, useSave, useUserTeam } from '../../state/game';
 import { BudgetBar } from '../components/BudgetBar';
 import { Card, PageHeader } from '../components/Card';
@@ -223,6 +224,8 @@ const FA_LABELS: Record<FaGroup, string> = { all: 'All', C: 'C', IF: 'IF', OF: '
 
 export function FreeAgency() {
   const save = useSave();
+  const market = save.league.market ?? null;
+  const [offering, setOffering] = useState<Player | null>(null);
   const team = useUserTeam();
   const act = useGame((s) => s.act);
   const openPlayer = useOpenPlayer();
@@ -240,6 +243,7 @@ export function FreeAgency() {
   return (
     <div className="grid grid-cols-1 gap-4">
       <Card><BudgetBar used={spending(save.league, save.players, team)} budget={payrollBudget(team)} label="Total spending" /></Card>
+      {market && <MarketPanel onOffer={setOffering} />}
       <Segmented<FaGroup>
         label="Position filter"
         value={group}
@@ -259,11 +263,20 @@ export function FreeAgency() {
                   p={p}
                   userTeamId={team.id}
                   onOpen={openPlayer}
-                  right={
+                  right={market ? (
+                    <button
+                      onClick={() => setOffering(p)}
+                      disabled={market.round > MARKET_ROUNDS}
+                      className={`h-9 shrink-0 rounded-lg px-3 text-xs font-semibold disabled:opacity-40 ${market.offers.some((o) => o.playerId === p.id) ? 'border border-accent text-accent' : 'bg-accent text-accent-contrast'}`}
+                    >
+                      {market.offers.some((o) => o.playerId === p.id) ? 'Edit offer' : 'Offer'}
+                      {market.interest[p.id] ? <span className="ml-1 opacity-75">· {market.interest[p.id]} bid{market.interest[p.id]! > 1 ? 's' : ''}</span> : null}
+                    </button>
+                  ) : (
                     <button onClick={() => void act(() => api().signFreeAgent(p.id))} className="h-9 shrink-0 rounded-lg bg-accent px-3 text-xs font-semibold text-accent-contrast">
                       {money(d.salary)}{d.years > 1 ? ` × ${d.years}` : ''}
                     </button>
-                  }
+                  )}
                 />
               );
             })}
@@ -275,7 +288,8 @@ export function FreeAgency() {
           </button>
         )}
       </Card>
-      <p className="text-sm text-muted">Other teams sign the rest of the market when you continue. Signed players join your active roster; the weakest player at that spot moves to AAA.</p>
+      <OfferSheet player={offering} onClose={() => setOffering(null)} />
+      <p className="text-sm text-muted">{market ? 'Asking prices are shown on each player. ' : ''}Other teams sign the rest of the market when you continue. Signed players join your active roster; the weakest player at that spot moves to AAA.</p>
     </div>
   );
 }

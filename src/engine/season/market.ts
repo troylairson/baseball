@@ -123,8 +123,7 @@ function commitments(state: SeasonState, teamId: number): [number, number] {
 }
 
 /** WAR of the player a signing would push out of the lineup/rotation/bullpen. */
-function replacedWar(state: SeasonState, teamId: number, fa: Player): number {
-  const org = state.players.filter((p) => p.teamId === teamId && !p.retired && !p.injury);
+function replacedWar(org: Player[], fa: Player): number {
   const role = roleOf(fa);
   const war = (p: Player) => expectedWar(p);
   if (role === 'SP') {
@@ -153,14 +152,32 @@ function contending(state: SeasonState, team: Team): boolean {
 
 /** Each AI club's offers for this round. */
 function aiBids(state: SeasonState, rng: Rng): Bid[] {
-  const pool = freeAgents(state.players).sort((a, b) => expectedWar(b) - expectedWar(a));
+  // Depth players sign minor league deals later; the market is for regulars.
+  const pool = freeAgents(state.players).filter((p) => expectedWar(p) >= 0.3);
   const bids: Bid[] = [];
+  // Rosters by club, and a cache of "who would he replace" by club and position.
+  const orgs = new Map<number, Player[]>();
+  for (const p of state.players) {
+    if (p.teamId === null || p.retired || p.injury) continue;
+    let list = orgs.get(p.teamId);
+    if (!list) orgs.set(p.teamId, (list = []));
+    list.push(p);
+  }
+  const replacedCache = new Map<string, number>();
+  const replaced = (teamId: number, fa: Player) => {
+    const key = `${teamId}-${fa.position}`;
+    let v = replacedCache.get(key);
+    if (v === undefined) replacedCache.set(key, (v = replacedWar(orgs.get(teamId) ?? [], fa)));
+    return v;
+  };
+  const warOf = new Map(pool.map((p) => [p.id, expectedWar(p)]));
   // Clubs stay under a luxury-tax line well above the league's average payroll.
-  const payrolls = state.teams.map((t) => commitments(state, t.id)[0]);
+  const committed = new Map(state.teams.map((t) => [t.id, commitments(state, t.id)]));
+  const payrolls = state.teams.map((t) => committed.get(t.id)![0]);
   const taxLine = (payrolls.reduce((a, b) => a + b, 0) / payrolls.length) * 1.3;
   for (const team of rng.shuffle(state.teams.filter((t) => t.id !== state.userTeamId))) {
     const budget = Math.min(nextBudget(team) * 0.97 - staffCost(state.league, team), taxLine);
-    let [next, after] = commitments(state, team.id);
+    let [next, after] = committed.get(team.id)!;
     const win = contending(state, team);
     // Clubs far under budget have to spend: they bid harder and on more players.
     const thrifty = next < budget * 0.6;
@@ -169,7 +186,7 @@ function aiBids(state: SeasonState, rng: Rng): Bid[] {
     const targets = pool
       .map((fa) => {
         const ask = fa.demand ?? contractDemand(fa);
-        const upgrade = expectedWar(fa) - replacedWar(state, team.id, fa);
+        const upgrade = warOf.get(fa.id)! - replaced(team.id, fa);
         return { fa, value: (upgrade * DOLLARS_PER_WAR - ask.salary * patience(state.league.market!.round)) / 1000 + upgrade * 2 + rng.normal(0, 3) };
       })
       .sort((a, b) => b.value - a.value)
@@ -179,7 +196,7 @@ function aiBids(state: SeasonState, rng: Rng): Bid[] {
       const ask = fa.demand ?? contractDemand(fa);
       // Rebuilding clubs sign veterans only on short deals (often to flip them at the deadline).
       if (!win && !thrifty && fa.age > 32) continue;
-      const upgrade = expectedWar(fa) - replacedWar(state, team.id, fa);
+      const upgrade = warOf.get(fa.id)! - replaced(team.id, fa);
       if (upgrade < (thrifty ? 0.3 : 0.6)) continue;
       // What the club thinks he's worth to them, with some disagreement between front offices.
       const worth = marketSalary(expectedWar(fa), roleOf(fa)) * (win ? 1.08 : thrifty ? 1.12 : 0.9) * (0.85 + rng.next() * 0.3);
