@@ -39,5 +39,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Season simulations run a few seconds locally and slower on CI runners.
+    testTimeout: 20000,
   },
 });
