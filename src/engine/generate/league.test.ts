@@ -71,3 +71,19 @@ describe('scoutRating', () => {
     expect(scoutRating(55, 99, 'power', 0.3)).toEqual(scoutRating(55, 99, 'power', 0.3));
   });
 });
+
+describe('league sizes', () => {
+  it('generates every supported size with legal rosters and a full schedule', async () => {
+    const { LEAGUE_SIZES, settingsFor } = await import('./league');
+    const { generateSchedule } = await import('../season/schedule');
+    const { Rng } = await import('../rng');
+    for (const size of Object.keys(LEAGUE_SIZES).map(Number)) {
+      const settings = settingsFor({ teamCount: size, gamesPerSeason: 60, designatedHitter: false, difficulty: 1 });
+      const g = generateLeague(size, settings);
+      expect(g.teams).toHaveLength(size);
+      expect(new Set(g.teams.map((t) => t.abbr)).size).toBe(size);
+      const sched = generateSchedule(g.teams, 60, g.league.season, new Rng(size));
+      for (const t of g.teams) expect(sched.filter((x) => x.homeId === t.id || x.awayId === t.id)).toHaveLength(60);
+    }
+  });
+});

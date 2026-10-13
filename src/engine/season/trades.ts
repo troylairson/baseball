@@ -87,7 +87,9 @@ export function evaluateTrade(ctx: TradeContext, proposal: TradeProposal): Trade
   const valueOut = sumValue(get, contending);
   // AI teams want to win the trade, and value quality over quantity.
   const depthDiscount = give.length > get.length ? 0.85 ** (give.length - get.length) : 1;
-  const needed = valueOut * 1.12 + 3;
+  // Harder difficulties make the AI demand a bigger win from every deal.
+  const [margin, floor] = ([[1.02, 1], [1.12, 3], [1.25, 5]] as const)[ctx.league.settings.difficulty ?? 1];
+  const needed = valueOut * margin + floor;
   const score = (valueIn * depthDiscount) / needed;
   if (score >= 1) return { accepted: true, score, message: 'They would accept this deal.', partnerMode: mode };
 

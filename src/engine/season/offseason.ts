@@ -59,7 +59,7 @@ export function setOwnerTargets(state: SeasonState): void {
     frac <= 0.75 ? [0.49, 'Finish around .500'] :
     [0.44, 'Rebuild and develop youth'];
   league.owner = {
-    jobSecurity: league.owner?.jobSecurity ?? 60,
+    jobSecurity: league.owner?.jobSecurity ?? [75, 60, 45][league.settings.difficulty ?? 1]!,
     targetWins: Math.round(games * winPct),
     expectation,
     fired: league.owner?.fired ?? false,
@@ -93,6 +93,8 @@ function ownerReview(state: SeasonState): void {
     delta -= penalty;
     notes.push('went over budget');
   }
+  // Owners are more forgiving on easy, quicker to anger on hard.
+  if (delta < 0) delta *= [0.6, 1, 1.4][league.settings.difficulty ?? 1]!;
   owner.jobSecurity = Math.round(Math.max(0, Math.min(100, owner.jobSecurity + delta)));
   owner.fired = owner.jobSecurity <= 0;
   owner.lastReview = `${delta >= 0 ? 'Pleased' : 'Disappointed'}: ${notes.join(', ')}.`;
@@ -307,26 +309,32 @@ export function signFreeAgent(state: SeasonState, teamId: number, playerId: numb
 }
 
 /** One pass of AI signings; each AI team signs at most one player per pass. */
-function aiFreeAgencyRound(state: SeasonState, rng: Rng): number {
+/** The best affordable free agent who clearly upgrades a team's active roster. */
+export function bestSigningFor(state: SeasonState, team: Team, exclude: Set<number> = new Set()): Player | undefined {
   const pool = freeAgents(state.players).sort((a, b) => overall(b) - overall(a));
+  const room = payrollBudget(team) - payroll(state.players, team.id) - staffCost(state.league, team);
+  const active = state.players.filter((p) => p.teamId === team.id && p.level === 'MLB' && !p.retired && !p.injury);
+  for (const fa of pool) {
+    if (exclude.has(fa.id)) continue;
+    const demand = fa.demand ?? contractDemand(fa);
+    if (demand.salary > room) continue;
+    const peers = active.filter((p) => (isPitcher(fa) ? p.position === fa.position : !isPitcher(p) && p.position === fa.position));
+    const comparable = peers.length ? peers : active.filter((p) => isPitcher(p) === isPitcher(fa));
+    const worst = Math.min(...comparable.map((p) => overall(p)));
+    if (overall(fa) >= worst + 2) return fa;
+  }
+  return undefined;
+}
+
+function aiFreeAgencyRound(state: SeasonState, rng: Rng): number {
   const taken = new Set<number>();
   let signed = 0;
   for (const team of rng.shuffle(state.teams.filter((t) => t.id !== state.userTeamId))) {
-    const room = payrollBudget(team) - payroll(state.players, team.id);
-    const active = state.players.filter((p) => p.teamId === team.id && p.level === 'MLB' && !p.retired);
-    for (const fa of pool) {
-      if (taken.has(fa.id)) continue;
-      const demand = fa.demand ?? contractDemand(fa);
-      if (demand.salary > room) continue;
-      const peers = active.filter((p) => (isPitcher(fa) ? p.position === fa.position : !isPitcher(p) && p.position === fa.position));
-      const comparable = peers.length ? peers : active.filter((p) => isPitcher(p) === isPitcher(fa));
-      const worst = Math.min(...comparable.map((p) => overall(p)));
-      if (overall(fa) < worst + 2) continue;
-      taken.add(fa.id);
-      signFreeAgent(state, team.id, fa.id);
-      signed++;
-      break;
-    }
+    const fa = bestSigningFor(state, team, taken);
+    if (!fa) continue;
+    taken.add(fa.id);
+    signFreeAgent(state, team.id, fa.id);
+    signed++;
   }
   return signed;
 }
@@ -561,7 +569,7 @@ export function startNewSeason(state: SeasonState, rng: Rng): number[] {
     t.rotationSlot = 0;
     trimMinors(state, t.id);
     const signed = fillOrgNeeds(state, t.id);
-    const moves = fixRoster(org(state, t.id), t.id !== state.userTeamId);
+    const moves = fixRoster(org(state, t.id), t.id !== state.userTeamId || !!t.autoRoster);
     if (t.id === state.userTeamId && (moves.length || signed)) {
       addNews(league, {
         kind: 'team',

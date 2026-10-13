@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../components/Icon';
 import { RatingBadge } from '../components/Rating';
 import { DivisionStandings } from '../components/Standings';
 import { TeamBadge } from '../components/TeamBadge';
+import { AssistantCard } from '../components/AssistantCard';
 import { GameRow } from '../components/GameRow';
 import { Inbox } from '../components/Inbox';
 import { fullName, money, shortName } from '../format';
@@ -88,6 +89,8 @@ export function Home() {
       </Card>
 
       <OwnerCard />
+
+      <AssistantCard />
 
       {league.phase === 'offseason' ? <OffseasonCard /> : <GamesCard />}
 

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useGame } from '../../state/game';
+import { api, useGame } from '../../state/game';
 import { useTheme, type ThemePref } from '../../state/theme';
 import { engine } from '../../worker/client';
 import { BottomSheet } from '../components/BottomSheet';
@@ -16,6 +16,7 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
   const { pref, setPref } = useTheme();
   const save = useGame((s) => s.save);
   const close = useGame((s) => s.close);
+  const act = useGame((s) => s.act);
 
   const exit = () => {
     onClose();
@@ -36,6 +37,23 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Appearance</h3>
         <Segmented<ThemePref> label="Theme" options={THEMES} value={pref} onChange={setPref} />
       </section>
+      {save && (
+        <section className="mb-6">
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Assistant GM</h3>
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-line px-4 py-3">
+            <span>
+              <span className="block font-medium">Handle call-ups</span>
+              <span className="block text-xs text-muted">Weekly, swap clearly better minor leaguers onto the active roster.</span>
+            </span>
+            <input
+              type="checkbox"
+              className="size-5 accent-[var(--accent)]"
+              checked={!!save.teams.find((t) => t.id === save.meta.userTeamId)?.autoRoster}
+              onChange={(e) => void act(() => api().setAutoRoster(e.target.checked))}
+            />
+          </label>
+        </section>
+      )}
       <section className="flex flex-col gap-2">
         <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted">Career</h3>
         <p className="text-sm text-muted">Progress is saved automatically on this device.</p>

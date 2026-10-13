@@ -1,8 +1,8 @@
 import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
-  acceptOffer, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  acceptOffer, assistantHandleStage, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
-  type SeasonState, type TeamStrategy, type TradeProposal, type GameResult, type LiveCommand, type LiveSituation,
+  type SeasonState, type TeamStrategy, type TradeProposal, type AdviceAction, type GameResult, type LiveCommand, type LiveSituation,
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
 import {
@@ -304,6 +304,39 @@ export function createEngineApi(db = new GameDB()) {
     },
 
     // --- Roster management -------------------------------------------------
+
+    /** Carry out one of the assistant's suggestions. */
+    async applyAdvice(action: AdviceAction): Promise<ActionResult> {
+      const { state } = current();
+      const byId = (id: number) => state.players.find((p) => p.id === id);
+      if (action.kind === 'swap') {
+        const up = byId(action.upId);
+        const down = byId(action.downId);
+        if (!up || !down || up.teamId !== state.userTeamId || down.teamId !== state.userTeamId) return { ok: false, reason: 'That move is no longer possible.' };
+        down.level = 'AAA';
+        up.level = 'MLB';
+        addNews(state.league, { kind: 'transaction', title: `Called up ${up.firstName} ${up.lastName}`, body: `${down.firstName} ${down.lastName} optioned to AAA.`, playerId: up.id, mine: true });
+        return commit();
+      }
+      if (action.kind === 'sign') {
+        const res = signFreeAgent(state, state.userTeamId, action.playerId);
+        return res.ok ? commit() : res;
+      }
+      const res = extendPlayer(state, action.playerId);
+      return res.ok ? commit() : res;
+    },
+
+    /** Let the assistant make this offseason stage's decisions. */
+    async assistantStage(): Promise<ActionResult> {
+      const done = assistantHandleStage(current().state);
+      if (done.length === 0) return { ok: false, reason: 'Nothing for your assistant to do here.' };
+      return commit();
+    },
+
+    async setAutoRoster(on: boolean): Promise<ActionResult> {
+      user().autoRoster = on;
+      return commit();
+    },
 
     async setStrategy(strategy: TeamStrategy): Promise<ActionResult> {
       user().strategy = strategy;

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { LEAGUE_SIZES, settingsFor } from '../../engine';
 import { useGame } from '../../state/game';
+import { Segmented } from '../components/Segmented';
 import type { TeamPreview } from '../../worker/api';
 import { engine } from '../../worker/client';
 import { Icon } from '../components/Icon';
@@ -10,21 +12,33 @@ import { money } from '../format';
 
 const MARKET = ['', 'Tiny', 'Small', 'Mid', 'Large', 'Huge'];
 
+function Setting({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1 text-sm font-medium">{label}</p>
+      {children}
+      {help && <p className="mt-1 text-xs text-muted">{help}</p>}
+    </div>
+  );
+}
+
 export function NewCareer() {
   const navigate = useNavigate();
   const load = useGame((s) => s.load);
   const [teams, setTeams] = useState<TeamPreview[] | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
+  const [opts, setOpts] = useState({ teamCount: 20, gamesPerSeason: 162, designatedHitter: true, difficulty: 1 as 0 | 1 | 2 });
 
   useEffect(() => {
     engine().previewLeague().then(setTeams);
   }, []);
 
-  const regenerate = () => {
+  const regenerate = (next = opts) => {
+    setOpts(next);
     setTeams(null);
     setSelected(null);
-    engine().previewLeague().then(setTeams);
+    engine().previewLeague(settingsFor(next)).then(setTeams);
   };
 
   const start = async () => {
@@ -44,13 +58,37 @@ export function NewCareer() {
           <Icon name="back" />
         </Link>
         <h1 className="flex-1 text-xl font-bold">Choose your team</h1>
-        <button onClick={regenerate} className="h-10 rounded-full px-4 text-sm font-medium text-accent hover:bg-surface-2">
+        <button onClick={() => regenerate()} className="h-10 rounded-full px-4 text-sm font-medium text-accent hover:bg-surface-2">
           New league
         </button>
       </div>
       <p className="mb-5 text-sm text-muted">
         A fictional league is generated each time. Weaker teams are a tougher rebuild; big markets can afford bigger payrolls.
       </p>
+
+      <details className="mb-5 rounded-2xl border border-line bg-surface p-4">
+        <summary className="cursor-pointer text-sm font-semibold">
+          League settings <span className="font-normal text-muted">· {opts.teamCount} teams · {opts.gamesPerSeason} games · {['Easy', 'Normal', 'Hard'][opts.difficulty]}</span>
+        </summary>
+        <div className="mt-4 grid gap-4">
+          <Setting label="Teams">
+            <Segmented label="Teams" value={String(opts.teamCount)} onChange={(v) => regenerate({ ...opts, teamCount: Number(v) })}
+              options={Object.keys(LEAGUE_SIZES).map((n) => ({ value: n, label: n }))} />
+          </Setting>
+          <Setting label="Season length">
+            <Segmented label="Season length" value={String(opts.gamesPerSeason)} onChange={(v) => regenerate({ ...opts, gamesPerSeason: Number(v) })}
+              options={[60, 100, 162].map((n) => ({ value: String(n), label: `${n} games` }))} />
+          </Setting>
+          <Setting label="Designated hitter">
+            <Segmented label="Designated hitter" value={opts.designatedHitter ? 'on' : 'off'} onChange={(v) => regenerate({ ...opts, designatedHitter: v === 'on' })}
+              options={[{ value: 'on', label: 'Universal DH' }, { value: 'off', label: 'Pitchers hit' }]} />
+          </Setting>
+          <Setting label="Difficulty" help="Harder means tougher trade partners and a less patient owner.">
+            <Segmented label="Difficulty" value={String(opts.difficulty)} onChange={(v) => regenerate({ ...opts, difficulty: Number(v) as 0 | 1 | 2 })}
+              options={['Easy', 'Normal', 'Hard'].map((l, i) => ({ value: String(i), label: l }))} />
+          </Setting>
+        </div>
+      </details>
 
       {!teams && <p className="py-20 text-center text-muted">Generating league…</p>}
 

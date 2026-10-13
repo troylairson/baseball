@@ -15,6 +15,20 @@ export const DEFAULT_SETTINGS: LeagueSettings = {
 
 export const START_SEASON = 2027;
 
+/** Supported league sizes and how they split into conferences/divisions. */
+export const LEAGUE_SIZES: Record<number, { conferences: number; divisionsPerConference: number }> = {
+  12: { conferences: 2, divisionsPerConference: 2 },
+  16: { conferences: 2, divisionsPerConference: 2 },
+  20: { conferences: 2, divisionsPerConference: 2 },
+  24: { conferences: 2, divisionsPerConference: 3 },
+  30: { conferences: 2, divisionsPerConference: 3 },
+};
+
+export function settingsFor(opts: { teamCount: number; gamesPerSeason: number; designatedHitter: boolean; difficulty: 0 | 1 | 2 }): LeagueSettings {
+  const shape = LEAGUE_SIZES[opts.teamCount] ?? LEAGUE_SIZES[20]!;
+  return { ...DEFAULT_SETTINGS, ...opts, ...shape };
+}
+
 export interface GeneratedLeague {
   league: League;
   teams: Team[];

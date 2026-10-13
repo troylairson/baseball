@@ -64,8 +64,10 @@ export function trainerRating(state: SeasonState, teamId: number): number {
 export function maintainRosters(state: SeasonState): void {
   for (const team of state.teams) {
     const org = state.players.filter((p) => p.teamId === team.id && !p.retired);
-    if (rosterIssues(org.filter((p) => p.level === 'MLB')).length === 0) continue;
-    const moves = fixRoster(org, team.id !== state.userTeamId);
+    // The assistant also reviews the user's roster once a week when asked to.
+    const weekly = team.id === state.userTeamId && team.autoRoster && Date.parse(`${state.league.date}T12:00:00Z`) / 86400000 % 7 < 1;
+    if (!weekly && rosterIssues(org.filter((p) => p.level === 'MLB')).length === 0) continue;
+    const moves = fixRoster(org, team.id !== state.userTeamId || !!team.autoRoster);
     if (team.id === state.userTeamId && moves.length) {
       const byId = new Map(org.map((p) => [p.id, p]));
       const describe = (to: 'MLB' | 'AAA') =>

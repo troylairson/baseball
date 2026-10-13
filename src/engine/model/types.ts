@@ -112,6 +112,8 @@ export interface Team {
   /** Manager's saved lineup and staff; null = let the AI decide each game. */
   plan?: SavedPlan | null;
   strategy?: TeamStrategy;
+  /** Let the assistant GM make call-ups/options to keep the best players active. */
+  autoRoster?: boolean;
 }
 
 /** 0 = low, 1 = balanced, 2 = high for each dial. */
@@ -156,6 +158,8 @@ export interface LeagueSettings {
   divisionsPerConference: number;
   gamesPerSeason: number;
   designatedHitter: boolean;
+  /** 0 = easy, 1 = normal, 2 = hard: AI trade savvy and owner patience. */
+  difficulty?: 0 | 1 | 2;
 }
 
 export interface ScheduledGame {

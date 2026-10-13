@@ -62,7 +62,16 @@ export function Offseason() {
       {stage === 'freeAgency' && <FreeAgency />}
       {stage === 'draft' && <Draft />}
 
-      <div className="pb-safe sticky bottom-20 z-20 mt-6 md:bottom-4">
+      {stage !== 'review' && (
+        <button
+          onClick={() => void act(() => api().assistantStage())}
+          className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-line text-sm font-semibold hover:bg-surface-2"
+        >
+          <Icon name="staff" className="size-4" /> Let my assistant decide
+        </button>
+      )}
+
+      <div className="pb-safe sticky bottom-20 z-20 mt-4 md:bottom-4">
         <button
           onClick={() => void next()}
           disabled={busy}
