@@ -12,6 +12,7 @@ import { updateMorale } from './morale';
 import { recordHomeGate, updateFans } from './finance';
 import { recordUserGame } from './gamelog';
 import { maybeMakeOffer } from './trades';
+import { maybeAiTrade } from './aiTrades';
 import {
   activeSeries, advanceBracket, createPlayoffs, nextSeriesGame, recordSeriesGame, roundName,
 } from './playoffs';
@@ -304,6 +305,7 @@ export function simDay(state: SeasonState, preplayed?: Map<number, GameResult>):
   updateMorale(state);
   updateFans(state);
   maybeMakeOffer(state, new Rng(`${state.seed}-offer-${league.date}`));
+  maybeAiTrade(state, new Rng(`${state.seed}-aitrade-${league.date}`));
 
   const today = state.schedule.filter((g) => g.date === league.date && !g.played);
   const players = new Map(state.players.map((p) => [p.id, p]));

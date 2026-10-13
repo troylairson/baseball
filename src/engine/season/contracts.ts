@@ -85,19 +85,6 @@ export function initialContract(p: Player, rng: { next: () => number; int: (a: n
   return { salary, years: rng.int(1, Math.max(1, Math.min(demand.years, 7))) };
 }
 
-/** Rough surplus value of a player for trades and roster decisions. */
-export function playerValue(p: Player, contending: boolean): number {
-  const ovr = overall(p);
-  const pot = overall(p, true);
-  const ageFactor = p.age <= 24 ? 1 : p.age <= 29 ? 0.9 : Math.max(0.3, 0.9 - (p.age - 29) * 0.12);
-  const now = Math.max(0, ovr - 38) ** 1.6;
-  const future = Math.max(0, pot - 38) ** 1.6 * (p.age <= 25 ? 0.8 : 0.2);
-  const salary = p.contract?.salary ?? MIN_SALARY;
-  const fair = contractDemand(p).salary;
-  const surplus = ((fair - salary) / 1000) * Math.min(3, p.contract?.years ?? 1) * 0.6;
-  return (contending ? now * 1.2 + future * 0.6 : now * 0.7 + future * 1.3) * ageFactor + surplus;
-}
-
 /**
  * Will a player sign an extension now? Loyal players on good teams say
  * yes; greedy players on bad teams prefer to test the market.

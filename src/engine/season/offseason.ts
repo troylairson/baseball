@@ -18,6 +18,7 @@ import { staffCost, staffOffseason, staffRating } from './staff';
 import { refusesToResign } from './morale';
 import { snapshotCores } from './chemistry';
 import { closeMarket, openMarket } from './market';
+import { attemptAiTrade } from './aiTrades';
 import { closeSeasonBooks, emptyFinances, nextBudget } from './finance';
 import { addSeasonToCareers, emptyCareer, hallOfFameVote, updateSeasonRecords } from './legacy';
 import { DRAFT_ROUNDS, pickId, pickOwner } from './picks';
@@ -513,6 +514,8 @@ export function advanceOffseason(state: SeasonState): number[] {
       return [];
     case 'freeAgency':
       closeMarket(state);
+      // Winter trades between clubs.
+      for (let i = 0; i < 10; i++) attemptAiTrade(state, rng.fork(`winter-trade-${i}`));
       aiDepthSignings(state);
       generateDraftClass(state, rng);
       league.draft = { picks: createDraftOrder(state), current: 0 };

@@ -329,6 +329,9 @@ Real MLB rosters (data pack + stats-to-ratings conversion), roster file export/i
 ### Animated field (done)
 Top-down animated ballpark in the live game view, built from the spec in `docs/ANIMATED_FIELD.md` (steps 1–4 and the reduced-motion part of 5). Not yet: key-moments-only mode, sound/haptics, spray charts from stored play events.
 
+### Economy and trades (done)
+Contracts priced by projected WAR with service-time contracts; a four-round free agent market with player choice; surplus-value trade model with AI scouting views and positional need; AI-to-AI trades. See README.
+
 ### Other backlog items
 - 40-man roster, options and waivers; an AA level
 - International amateur signings; draft bonus pools

@@ -66,7 +66,8 @@ export function projectedSlot(teams: Team[], originalTeamId: number, players?: P
  */
 export function pickValue(teams: Team[], ref: PickRef, contending: boolean, players?: Player[]): number {
   const slot = projectedSlot(teams, ref.originalTeamId, players);
-  const base = ref.round === 1 ? 150 * (1 - ((slot - 1) / teams.length) * 0.6) : ref.round === 2 ? 45 : ref.round === 3 ? 18 : 8;
+  // Surplus value in $M: a top pick is a cheap future regular; later rounds are long shots.
+  const base = ref.round === 1 ? 40 * (1 - ((slot - 1) / teams.length) * 0.7) : ref.round === 2 ? 6 : ref.round === 3 ? 2 : 1;
   return base * (contending ? 0.6 : 1.2);
 }
 

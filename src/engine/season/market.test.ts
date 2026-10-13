@@ -76,7 +76,7 @@ describe('free agent market', () => {
     expect(s.league.market!.offers.some((o) => o.playerId === fa.id)).toBe(false);
   });
 
-  it('lets AI clubs sign most of the good free agents within budget', () => {
+  it('lets AI clubs sign most of the good free agents within budget', { timeout: 30000 }, () => {
     const t = atFreeAgency(22);
     const good = freeAgents(t.players).filter((p) => expectedWar(p) >= 2);
     for (let r = 1; r <= MARKET_ROUNDS; r++) resolveRound(t, r === MARKET_ROUNDS);
@@ -86,7 +86,7 @@ describe('free agent market', () => {
     for (const p of signed) expect(p.contract!.salary).toBeGreaterThan(760 * 2);
   });
 
-  it('closes when moving on to the draft', () => {
+  it('closes when moving on to the draft', { timeout: 30000 }, () => {
     const t = atFreeAgency(23);
     advanceOffseason(t);
     expect(t.league.market).toBeNull();

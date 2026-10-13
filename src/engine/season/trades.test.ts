@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateLeague } from '../generate/league';
 import { overall } from '../model/ratings';
 import type { Player } from '../model/types';
-import { playerValue } from './contracts';
+import { playerValue } from './value';
 import { rosterIssues } from './roster';
 import { Rng } from '../rng';
 import { acceptOffer, evaluateTrade, executeTrade, maybeMakeOffer, shopPlayer, suggestPackage } from './trades';
@@ -40,18 +40,27 @@ describe('trades', () => {
     expect(ev.accepted).toBe(false);
   });
 
-  it('never accepts a deal that loses value in its own eyes', () => {
+  it('never takes a strictly worse player for a better one', () => {
     const c = ctx(4);
     for (let partner = 1; partner < 8; partner++) {
-      for (const mine of mlb(c.players, 0).slice(0, 8)) {
-        for (const theirs of mlb(c.players, partner).slice(0, 8)) {
-          const ev = evaluateTrade(c, { partnerId: partner, give: [mine.id], get: [theirs.id] });
-          if (!ev.accepted) continue;
-          const contending = ev.partnerMode === 'contending';
-          expect(playerValue(mine, contending)).toBeGreaterThan(playerValue(theirs, contending));
+      for (const mine of mlb(c.players, 0)) {
+        for (const theirs of mlb(c.players, partner)) {
+          const worse = overall(mine) < overall(theirs) - 2 && mine.age >= theirs.age && (mine.contract?.salary ?? 0) >= (theirs.contract?.salary ?? 0)
+            && (mine.contract?.years ?? 0) >= (theirs.contract?.years ?? 0) && mine.position === theirs.position;
+          if (!worse) continue;
+          expect(evaluateTrade(c, { partnerId: partner, give: [mine.id], get: [theirs.id] }).accepted).toBe(false);
         }
       }
     }
+  });
+
+  it('values cheap control over an expensive contract for the same player', () => {
+    const c = ctx(8);
+    const p = best(mlb(c.players, 1));
+    const cheap = { ...p, contract: { salary: 900, years: 4 }, experience: 1 };
+    const pricey = { ...p, contract: { salary: 45000, years: 4 }, experience: 9 };
+    expect(playerValue(cheap, true)).toBeGreaterThan(playerValue(pricey, true) + 50);
+    expect(playerValue(pricey, false)).toBeLessThan(0);
   });
 
   it('respects the trade deadline', () => {

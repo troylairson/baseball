@@ -1,6 +1,7 @@
 import { isPitcher, overall } from '../model/ratings';
 import type { League, Player, Team, TradeOffer } from '../model/types';
-import { playerValue } from './contracts';
+import { playerValue, teamView, type RatingView } from './value';
+import { roleOf, warForRating } from './contracts';
 import { addNews } from './news';
 import { payroll, payrollBudget, teamStrength } from './offseason';
 import { fixRoster } from './roster';
@@ -54,10 +55,48 @@ export function teamMode(ctx: TradeContext, teamId: number): 'contending' | 'reb
   return ranked.findIndex((t) => t.id === teamId) < ctx.teams.length / 2 ? 'contending' : 'rebuilding';
 }
 
-const sumValue = (list: Player[], contending: boolean) => list.reduce((s, p) => s + playerValue(p, contending), 0);
+/**
+ * How much a club needs a player, given its roster: a starter at an open spot
+ * is worth more than a bench bat or a ninth reliever.
+ */
+export function needMultiplier(roster: Player[], p: Player, view: (x: Player) => RatingView): number {
+  const v = view(p).ovr;
+  const others = roster.filter((x) => x.id !== p.id && !x.retired && (x.level === 'MLB' || view(x).ovr >= v - 2));
+  if (p.position === 'SP') {
+    const rank = others.filter((x) => x.position === 'SP' && view(x).ovr > v).length;
+    return rank < 2 ? 1.12 : rank < 5 ? 1.03 : 0.7;
+  }
+  if (p.position === 'RP') {
+    const rank = others.filter((x) => isPitcher(x) && x.position === 'RP' && view(x).ovr > v).length;
+    return rank < 3 ? 1.05 : rank < 7 ? 0.95 : 0.6;
+  }
+  const atPos = others.filter((x) => !isPitcher(x) && (x.position === p.position || x.positionRatings[p.position as keyof Player['positionRatings']] !== undefined));
+  const betterAtPos = atPos.filter((x) => view(x).ovr > v).length;
+  const betterBats = others.filter((x) => !isPitcher(x) && view(x).ovr > v).length;
+  if (betterAtPos === 0) return 1.15;
+  return betterBats < 9 ? 1 : 0.7;
+}
+
+/** Total value of a set of players to a club, with need and quality-over-quantity applied. */
+function packageValue(
+  players: Player[], contending: boolean, view: (x: Player) => RatingView, need: (p: Player) => number, floor: (p: Player) => number = () => -Infinity,
+): number {
+  const values = players.map((p) => {
+    const v = Math.max(playerValue(p, contending, view(p)), floor(p));
+    return v > 0 ? v * need(p) : v;
+  });
+  // Extra pieces are worth less: roster spots are limited and stars matter most.
+  const positive = values.filter((v) => v > 0).sort((a, b) => b - a);
+  const negative = values.filter((v) => v <= 0).reduce((s, v) => s + v, 0);
+  return positive.reduce((s, v, i) => s + v * 0.85 ** i, 0) + negative;
+}
 const salaries = (list: Player[]) => list.reduce((s, p) => s + (p.contract?.salary ?? 0), 0);
 
-export function evaluateTrade(ctx: TradeContext, proposal: TradeProposal): TradeEvaluation {
+/**
+ * Would the partner accept? `fair` drops the difficulty margin the AI
+ * demands from the user (for deals between two AI clubs).
+ */
+export function evaluateTrade(ctx: TradeContext, proposal: TradeProposal, opts: { fair?: boolean } = {}): TradeEvaluation {
   const byId = new Map(ctx.players.map((p) => [p.id, p]));
   const give = proposal.give.map((id) => byId.get(id)).filter((p): p is Player => !!p);
   const get = proposal.get.map((id) => byId.get(id)).filter((p): p is Player => !!p);
@@ -89,22 +128,32 @@ export function evaluateTrade(ctx: TradeContext, proposal: TradeProposal): Trade
   // Budget: they won't take on salary they can't afford.
   const partner = ctx.teams.find((t) => t.id === proposal.partnerId)!;
   const newPayroll = payroll(ctx.players, partner.id) - salaries(get) + salaries(give);
-  if (salaries(give) > salaries(get) && newPayroll > payrollBudget(partner) * 1.03) {
+  if (salaries(give) > salaries(get) && newPayroll > payrollBudget(partner) * (opts.fair ? 1.08 : 1.03)) {
     return no(`That adds too much salary — they're near their budget.`);
   }
 
+  // The partner judges everyone through its own scouts, and by its roster needs.
+  const views = new Map<number, RatingView>();
+  const view = (p: Player) => {
+    let v = views.get(p.id);
+    if (!v) views.set(p.id, (v = teamView(ctx.league, partner, p)));
+    return v;
+  };
   const picksValue = (ids: string[]) => ids.reduce((sum, id) => sum + pickValue(ctx.teams, parsePickId(id), contending, ctx.players), 0);
-  const valueIn = sumValue(give, contending) + picksValue(givePicks);
-  const valueOut = sumValue(get, contending) + picksValue(getPicks);
-  // AI teams want to win the trade, and value quality over quantity.
-  const assetsIn = give.length + givePicks.length;
-  const assetsOut = get.length + getPicks.length;
-  const depthDiscount = assetsIn > assetsOut ? 0.85 ** (assetsIn - assetsOut) : 1;
-  // Harder difficulties make the AI demand a bigger win from every deal.
-  const [margin, floor] = ([[1.02, 1], [1.12, 3], [1.25, 5]] as const)[ctx.league.settings.difficulty ?? 1];
-  const needed = valueOut * margin + floor;
-  const score = (valueIn * depthDiscount) / needed;
-  if (score >= 1) return { accepted: true, score, message: 'They would accept this deal.', partnerMode: mode };
+  const valueIn = packageValue(give, contending, view, (p) => needMultiplier(after, p, view)) + picksValue(givePicks);
+  // Losing a starter they can't replace hurts more than the player's own value.
+  const remaining = partnerOrg.filter((p) => !proposal.get.includes(p.id));
+  const hole = (p: Player) => (playerValue(p, contending, view(p)) > 0 && needMultiplier([...remaining, p], p, view) >= 1.12 ? 1.1 : 1);
+  // Clubs don't give away wins for nothing, however the contract looks: a good
+  // player is worth at least a real return (more to a contender).
+  const keepFloor = (p: Player) => Math.max(0, warForRating(view(p).ovr, roleOf(p))) * (roleOf(p) === 'RP' ? 1.7 : 1) * (contending ? 2.5 : 0.8);
+  const valueOut = packageValue(get, contending, view, hole, keepFloor) + picksValue(getPicks);
+  // AI teams want to win the trade; harder difficulties demand a bigger win.
+  const [margin, floor] = opts.fair ? [0.02, 0.5] : ([[0.02, 0.5], [0.1, 2], [0.22, 4]] as const)[ctx.league.settings.difficulty ?? 1];
+  const needed = floor + margin * Math.abs(valueOut);
+  const gain = valueIn - valueOut - needed;
+  const score = 1 + gain / Math.max(8, Math.abs(valueOut) + needed);
+  if (gain >= 0) return { accepted: true, score, message: 'They would accept this deal.', partnerMode: mode };
 
   const wants = contending
     ? 'They are contending and want players who help now.'

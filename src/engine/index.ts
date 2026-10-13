@@ -36,3 +36,5 @@ export * from './generate/mlb';
 export * from './season/chemistry';
 export * from './sim/plays';
 export * from './season/market';
+export * from './season/value';
+export * from './season/aiTrades';
