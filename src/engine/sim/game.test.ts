@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateLeague } from '../generate/league';
 import { Rng } from '../rng';
-import { simGame, type TeamGameInput } from './game';
+import { liveGame, simGame, type TeamGameInput } from './game';
 import { autoPlan } from './lineup';
 
 const { teams, players } = generateLeague(8);
@@ -75,4 +75,49 @@ describe('team strategy', () => {
     expect(high.sacs).toBeGreaterThan(20);
   });
   it('a long leash lets starters work deeper', () => expect(high.starterOuts).toBeGreaterThan(low.starterOuts * 1.1));
+});
+
+describe('liveGame', () => {
+  it('matches simGame exactly when the manager makes no calls', () => {
+    const a = simGame(input(0, true), input(1, true), true, new Rng(77), true);
+    const gen = liveGame(input(0, true), input(1, true), true, new Rng(77), true, undefined, { teamId: 0 });
+    let step = gen.next();
+    let pauses = 0;
+    while (!step.done) {
+      pauses++;
+      step = gen.next({ type: 'auto' });
+    }
+    expect(pauses).toBeGreaterThan(30);
+    expect(step.value.home.runs).toBe(a.home.runs);
+    expect(step.value.away.runs).toBe(a.away.runs);
+  });
+
+  it('applies pinch hitters, pitching changes and intentional walks', () => {
+    const gen = liveGame(input(0, true), input(1, true), true, new Rng(5), true, undefined, { teamId: 0 });
+    let step = gen.next();
+    let pinch = false;
+    let change = false;
+    let ibb = false;
+    while (!step.done) {
+      const s = step.value;
+      let cmd: Parameters<typeof gen.next>[0] = { type: 'auto' };
+      if (s.userBatting && !pinch && s.bench.length) {
+        cmd = { type: 'pinchHit', playerId: s.bench[0]! };
+        pinch = true;
+      } else if (!s.userBatting && !change && s.inning >= 3 && s.bullpen.length) {
+        cmd = { type: 'pitchingChange', playerId: s.bullpen[0]! };
+        change = true;
+      } else if (!s.userBatting && change && !ibb) {
+        cmd = { type: 'ibb' };
+        ibb = true;
+      }
+      step = gen.next(cmd);
+    }
+    const r = step.value;
+    const away = r.away; // team 0 is away
+    expect(away.batters.length).toBeGreaterThan(9);
+    expect(away.pitchers.length).toBeGreaterThan(1);
+    expect(r.log.some((l) => l.includes('intentionally walked'))).toBe(true);
+    expect(away.batters.reduce((s, b) => s + b.line.r, 0)).toBe(away.runs);
+  });
 });

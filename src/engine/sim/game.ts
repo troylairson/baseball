@@ -38,6 +38,48 @@ export interface TeamBox {
   innings: number[];
 }
 
+/** A manager's call at a plate appearance (live games). */
+export type LiveCommand =
+  | { type: 'auto' }
+  | { type: 'swing' }
+  | { type: 'steal' }
+  | { type: 'bunt' }
+  | { type: 'ibb' }
+  | { type: 'pinchHit'; playerId: number }
+  | { type: 'pitchingChange'; playerId: number };
+
+/** Snapshot handed to the manager before each plate appearance involving their team. */
+export interface LiveSituation {
+  inning: number;
+  half: 'top' | 'bottom';
+  outs: number;
+  /** Runner ids on first, second, third. */
+  bases: (number | null)[];
+  awayRuns: number;
+  homeRuns: number;
+  awayInnings: number[];
+  homeInnings: number[];
+  awayHits: number;
+  homeHits: number;
+  battingTeamId: number;
+  batterId: number;
+  pitcherId: number;
+  pitcherPitches: number;
+  /** Today's lines so far. */
+  batterLine: BattingLine;
+  pitcherLine: PitchingLine;
+  /** The user's team is batting (else fielding). */
+  userBatting: boolean;
+  /** User's unused bench hitters / available pitchers. */
+  bench: number[];
+  bullpen: number[];
+  log: string[];
+}
+
+export interface LiveControl {
+  teamId: number;
+}
+
 export interface GameResult {
   away: TeamBox;
   home: TeamBox;
@@ -108,9 +150,25 @@ function teamDefense(lineup: LineupSlot[], players: Map<number, Player>): number
 
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
+/** Simulate a whole game without interruption. */
 export function simGame(
   awayIn: TeamGameInput, homeIn: TeamGameInput, useDH: boolean, rng: Rng, withLog = false, norms: RatingNorms = BASE_NORMS,
 ): GameResult {
+  const game = liveGame(awayIn, homeIn, useDH, rng, withLog, norms, null);
+  let step = game.next();
+  while (!step.done) step = game.next();
+  return step.value;
+}
+
+/**
+ * The game engine as a generator. With `control`, it pauses before each
+ * plate appearance involving that team, yields the situation and takes a
+ * manager's command. Without control it never yields.
+ */
+export function* liveGame(
+  awayIn: TeamGameInput, homeIn: TeamGameInput, useDH: boolean, rng: Rng, withLog = false, norms: RatingNorms = BASE_NORMS,
+  control: LiveControl | null = null,
+): Generator<LiveSituation, GameResult, LiveCommand | undefined> {
   const log: string[] = [];
   // Shift ratings so the league average of this era plays like the calibrated baseline.
   const shift = {
@@ -260,6 +318,30 @@ export function simGame(
     if (pull) callBullpen(field, inning, lead, outs);
   };
 
+  const benchFor = (side: Side) =>
+    side.input.roster.filter((p) => !p.pitching && !side.batters.has(p.id)).map((p) => p.id);
+  const bullpenFor = (side: Side) => {
+    const gone = used(side);
+    return side.input.roster.filter((p) => p.pitching && !gone.has(p.id) && p.id !== side.input.starterId).map((p) => p.id);
+  };
+
+  const pinchHit = (side: Side, playerId: number) => {
+    if (!benchFor(side).includes(playerId)) return;
+    const idx = side.batterIdx;
+    const out = side.order[idx]!;
+    const entry = { playerId, position: out.position, line: { ...emptyBatting(), g: 1 } };
+    side.order[idx] = entry;
+    side.batters.set(playerId, entry);
+    side.lineup[idx] = { playerId, position: out.position };
+    say(`Pinch hitter: ${name(side, playerId)} bats for ${name(side, out.playerId)}.`);
+  };
+
+  const managerChange = (side: Side, playerId: number, lead: number, outs: number) => {
+    if (!bullpenFor(side).includes(playerId)) return;
+    say(`Pitching change: ${name(side, playerId)} replaces ${name(side, current(side).playerId)}.`);
+    enter(side, playerId, 'MR', lead, outs);
+  };
+
   let inning = 0;
   let gameOver = false;
 
@@ -299,15 +381,46 @@ export function simGame(
 
       while (outs < 3) {
         if (outs > 0 || bases.some(Boolean)) managePitcher(field, inning, field.runs - bat.runs, outs, false);
+        let tactic: LiveCommand['type'] = 'auto';
+        if (control && (bat.input.team.id === control.teamId || field.input.team.id === control.teamId)) {
+          const userBatting = bat.input.team.id === control.teamId;
+          const cmd = yield {
+            inning, half, outs,
+            bases: bases.map((r) => r?.id ?? null),
+            awayRuns: away.runs, homeRuns: home.runs,
+            awayInnings: [...away.innings, ...(half === 'top' ? [inningRuns] : [])],
+            homeInnings: [...home.innings, ...(half === 'bottom' ? [inningRuns] : [])],
+            awayHits: away.hits, homeHits: home.hits,
+            battingTeamId: bat.input.team.id,
+            batterId: bat.order[bat.batterIdx]!.playerId,
+            pitcherId: current(field).playerId,
+            pitcherPitches: current(field).line.pitches,
+            batterLine: { ...bat.order[bat.batterIdx]!.line },
+            pitcherLine: { ...current(field).line },
+            userBatting,
+            bench: userBatting ? benchFor(bat) : [],
+            bullpen: userBatting ? [] : bullpenFor(field),
+            log: [...log],
+          };
+          if (cmd?.type === 'pinchHit' && userBatting) {
+            pinchHit(bat, cmd.playerId);
+            continue;
+          }
+          if (cmd?.type === 'pitchingChange' && !userBatting) {
+            managerChange(field, cmd.playerId, field.runs - bat.runs, outs);
+            continue;
+          }
+          if (cmd) tactic = cmd.type;
+        }
         const app = current(field);
         const pitcher = field.players.get(app.playerId)!;
 
         // Stolen base attempt: runner on first, second open.
         const onFirst = bases[0];
-        if (onFirst && !bases[1] && outs < 2) {
+        if (onFirst && !bases[1] && outs < 2 && tactic !== 'swing' && tactic !== 'ibb' && tactic !== 'bunt') {
           const runner = bat.players.get(onFirst.id)!;
           const speed = runner.batting.speed;
-          if (speed > 40 && rng.chance((speed - 40) * 0.012 * [0.45, 1, 1.7][strat(bat).baserunning]!)) {
+          if (tactic === 'steal' || (speed > 40 && rng.chance((speed - 40) * 0.012 * [0.45, 1, 1.7][strat(bat).baserunning]!))) {
             const line = bat.batters.get(onFirst.id)!.line;
             if (rng.chance(0.72 + (speed - 55) * 0.007 - (field.catcherArm - 50) * 0.004)) {
               line.sb++;
@@ -329,42 +442,68 @@ export function simGame(
         bat.batterIdx = (bat.batterIdx + 1) % bat.order.length;
         const batter = bat.players.get(slot.playerId)!;
 
+        if (tactic === 'ibb') {
+          slot.line.pa++;
+          slot.line.bb++;
+          app.line.bb++;
+          app.line.bf++;
+          app.line.pitches += 4;
+          say(`${name(bat, batter.id)} is intentionally walked.`);
+          if (bases[0]) {
+            if (bases[1]) {
+              if (bases[2]) score(bases[2], batter.id);
+              bases[2] = bases[1];
+            }
+            bases[1] = bases[0];
+          }
+          bases[0] = { id: batter.id, pitcherId: app.playerId, earned: true };
+          if (walkoff()) {
+            gameOver = true;
+            say(`${bat.input.team.city} wins it on a walk-off!`);
+            break;
+          }
+          continue;
+        }
+
         // Sacrifice bunt: runner(s) on, nobody out, weak bat or a close late game.
         const smallBall = strat(bat).smallBall;
-        if (smallBall > 0 && outs === 0 && bases[0] && !bases[2]) {
+        const canBunt = (bases[0] || bases[1]) && !bases[2] && outs < 2;
+        const autoBunt = tactic === 'auto' && smallBall > 0 && outs === 0 && bases[0] && !bases[2];
+        if ((tactic === 'bunt' && canBunt) || autoBunt) {
           const weak = slot.position === 'P' || battingOverall(batter.batting) < 40;
           const closeLate = inning >= 7 && Math.abs(bat.runs - field.runs) <= 1;
-          if ((weak || closeLate) && rng.chance(smallBall === 2 ? 0.75 : 0.3)) {
+          if (tactic === 'bunt' || ((weak || closeLate) && rng.chance(smallBall === 2 ? 0.75 : 0.3))) {
             const b = slot.line;
             b.pa++;
             app.line.bf++;
             app.line.pitches += 2;
             const roll = rng.next();
             const who = name(bat, batter.id);
+            // Third base is empty here, so every runner can move up one base.
+            const advanceAll = () => {
+              bases[2] = bases[1] ?? null;
+              bases[1] = bases[0] ?? null;
+              bases[0] = null;
+            };
             if (roll < 0.75) {
               outs++;
               app.line.outs++;
-              if (bases[1]) bases[2] = bases[1];
-              bases[1] = bases[0];
-              bases[0] = null;
+              advanceAll();
               say(`${who} lays down a sacrifice bunt.`);
             } else if (roll < 0.85) {
               b.ab++;
               b.h++;
               app.line.h++;
               bat.hits++;
-              if (bases[1]) bases[2] = bases[1];
-              bases[1] = bases[0];
+              advanceAll();
               bases[0] = { id: batter.id, pitcherId: app.playerId, earned: true };
               say(`${who} beats out a bunt for a hit.`);
             } else {
               b.ab++;
               outs++;
               app.line.outs++;
-              // Lead runner is cut down; batter takes first.
-              if (bases[1]) {
-                bases[1] = bases[0];
-              }
+              // The lead runner is cut down; the batter takes first.
+              if (bases[1]) bases[1] = bases[0] ?? null;
               bases[0] = { id: batter.id, pitcherId: app.playerId, earned: true };
               say(`${who} bunts into a force out.`);
             }

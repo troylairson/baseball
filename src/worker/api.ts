@@ -1,8 +1,8 @@
 import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
-  acceptOffer, autoDraftPick, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  acceptOffer, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
-  type SeasonState, type TeamStrategy, type TradeProposal,
+  type SeasonState, type TeamStrategy, type TradeProposal, type GameResult, type LiveCommand, type LiveSituation,
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
 import {
@@ -21,6 +21,11 @@ export interface TeamPreview {
   overall: number;
   payroll: number;
 }
+
+export type LiveState =
+  | { status: 'live'; gameId: number; awayId: number; homeId: number; situation: LiveSituation; save?: LoadedSave }
+  | { status: 'final'; gameId: number; save: LoadedSave }
+  | { status: 'none'; reason: string; save?: LoadedSave };
 
 export type SimMode = 'next' | 'week' | 'month' | 'season' | 'playoffs';
 
@@ -44,6 +49,13 @@ export function createEngineApi(db = new GameDB()) {
   let pending: { seed: number; generated: GeneratedLeague } | null = null;
   let session: { save: LoadedSave; state: SeasonState } | null = null;
   let cancelRequested = false;
+  let live: {
+    gen: Generator<LiveSituation, GameResult, LiveCommand | undefined>;
+    gameId: number;
+    awayId: number;
+    homeId: number;
+    situation: LiveSituation;
+  } | null = null;
 
   const open = async (saveId: string): Promise<LoadedSave | null> => {
     const save = await loadSave(db, saveId);
@@ -88,6 +100,25 @@ export function createEngineApi(db = new GameDB()) {
     const save = sync();
     await persistProgress(db, save, changes);
     return { ok: true, save };
+  };
+
+  const persistPlayed = async (played: PlayedGame[]) => {
+    const { state } = current();
+    const save = sync();
+    await persistProgress(db, save, {
+      changedGames: played.map((p) => p.game),
+      boxScores: played.map(({ game, result }) => ({ gameId: game.id, season: state.league.season, date: game.date, result })),
+    });
+    return save;
+  };
+
+  /** Finish the live game: record it, play the rest of the day, persist. */
+  const finishLive = async (result: GameResult): Promise<LiveState> => {
+    const { state } = current();
+    const gameId = live!.gameId;
+    live = null;
+    const played = simDay(state, new Map([[gameId, result]]));
+    return { status: 'final', gameId, save: await persistPlayed(played) };
   };
 
   return {
@@ -141,6 +172,64 @@ export function createEngineApi(db = new GameDB()) {
       return [...stored.filter((s) => s.season !== session!.state.league.season), ...(live ? [live] : [])];
     },
 
+    /**
+     * Start (or resume) a live game: sims ahead to the user's next game day,
+     * then pauses before each of their plate appearances.
+     */
+    async liveStart(): Promise<LiveState> {
+      if (live) return { status: 'live', gameId: live.gameId, awayId: live.awayId, homeId: live.homeId, situation: live.situation };
+      const { state } = current();
+      const played: PlayedGame[] = [];
+      let setup = prepareLiveGame(state);
+      for (let guard = 0; !setup && guard < 60; guard++) {
+        const before = state.league.date;
+        played.push(...simDay(state));
+        if (state.league.date === before || state.league.phase === 'offseason' || playoffsOver(state)) break;
+        if (state.league.phase === 'playoffs' && !state.league.playoffs?.series.some((s) => s.winnerId === null && (s.highId === state.userTeamId || s.lowId === state.userTeamId))) break;
+        setup = prepareLiveGame(state);
+      }
+      // Always send a fresh snapshot: the season may have just started (phase/date changed).
+      const save = played.length ? await persistPlayed(played) : sync();
+      if (!setup) return { status: 'none', reason: 'Your team has no game to play right now.', save };
+      const gen = liveGame(setup.away, setup.home, setup.useDH, setup.rng, true, setup.norms, { teamId: state.userTeamId });
+      const step = gen.next();
+      if (step.done) {
+        const day = simDay(state, new Map([[setup.game.id, step.value]]));
+        return { status: 'final', gameId: setup.game.id, save: await persistPlayed([...played, ...day]) };
+      }
+      live = { gen, gameId: setup.game.id, awayId: setup.game.awayId, homeId: setup.game.homeId, situation: step.value };
+      return { status: 'live', gameId: live.gameId, awayId: live.awayId, homeId: live.homeId, situation: step.value, save };
+    },
+
+    async liveCommand(cmd: LiveCommand): Promise<LiveState> {
+      if (!live) return { status: 'none', reason: 'No live game in progress.' };
+      const step = live.gen.next(cmd);
+      if (step.done) return finishLive(step.value);
+      live.situation = step.value;
+      return { status: 'live', gameId: live.gameId, awayId: live.awayId, homeId: live.homeId, situation: step.value };
+    },
+
+    /** Let the AI manage the rest of the live game. */
+    async liveFinish(): Promise<LiveState> {
+      if (!live) return { status: 'none', reason: 'No live game in progress.' };
+      let step = live.gen.next({ type: 'auto' });
+      while (!step.done) step = live.gen.next({ type: 'auto' });
+      return finishLive(step.value);
+    },
+
+    /** Advance until the half-inning changes (or the game ends). */
+    async liveSimInning(): Promise<LiveState> {
+      if (!live) return { status: 'none', reason: 'No live game in progress.' };
+      const { inning, half } = live.situation;
+      let step = live.gen.next({ type: 'auto' });
+      while (!step.done && step.value.inning === inning && step.value.half === half) step = live.gen.next({ type: 'auto' });
+      if (step.done) return finishLive(step.value);
+      live.situation = step.value;
+      return { status: 'live', gameId: live.gameId, awayId: live.awayId, homeId: live.homeId, situation: step.value };
+    },
+
+    hasLiveGame: () => live !== null,
+
     cancelSim() {
       cancelRequested = true;
     },
@@ -150,6 +239,11 @@ export function createEngineApi(db = new GameDB()) {
      * returns the updated snapshot.
      */
     async sim(mode: SimMode, onProgress?: (p: SimProgress) => void): Promise<LoadedSave> {
+      if (live) {
+        let step = live.gen.next({ type: 'auto' });
+        while (!step.done) step = live.gen.next({ type: 'auto' });
+        await finishLive(step.value);
+      }
       const { state } = current();
       cancelRequested = false;
       const startPhase = state.league.phase === 'preseason' ? 'regular' : state.league.phase;

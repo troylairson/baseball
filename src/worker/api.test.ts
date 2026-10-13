@@ -24,6 +24,21 @@ describe('engine api', () => {
     const box = await api.getBoxScore(userGames[0]!.id);
     expect(box?.result.log.length).toBeGreaterThan(0);
 
+    // A live game: make a call or two, then let the AI finish.
+    const live = await api.liveStart();
+    expect(live.status).toBe('live');
+    if (live.status === 'live') {
+      const next = await api.liveCommand({ type: live.situation.userBatting ? 'swing' : 'ibb' });
+      expect(['live', 'final']).toContain(next.status);
+      const fin = await api.liveFinish();
+      expect(fin.status).toBe('final');
+      if (fin.status === 'final') {
+        const g = fin.save.schedule.find((x) => x.id === live.gameId)!;
+        expect(g.played).toBe(true);
+        expect((await api.getBoxScore(live.gameId))?.result.log.length).toBeGreaterThan(0);
+      }
+    }
+
     const done = await api.sim('season');
     expect(done.schedule.every((g) => g.played)).toBe(true);
     const wins = done.teams.reduce((s, t) => s + t.wins, 0);

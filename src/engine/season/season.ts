@@ -165,12 +165,12 @@ export function startPlayoffs(state: SeasonState): void {
   for (const p of state.players) p.fatigue = 0;
 }
 
-function playGame(state: SeasonState, game: ScheduledGame, teams: Map<number, Team>): PlayedGame {
+function playGame(state: SeasonState, game: ScheduledGame, teams: Map<number, Team>, preplayed?: Map<number, GameResult>): PlayedGame {
   const { league } = state;
   const home = teams.get(game.homeId)!;
   const away = teams.get(game.awayId)!;
   const withLog = home.id === state.userTeamId || away.id === state.userTeamId;
-  const result = simGame(
+  const result = preplayed?.get(game.id) ?? simGame(
     teamInput(state, away),
     teamInput(state, home),
     league.settings.designatedHitter,
@@ -216,16 +216,20 @@ function recover(state: SeasonState, days: number): void {
   }
 }
 
-function simPlayoffDay(state: SeasonState, teams: Map<number, Team>): PlayedGame[] {
+function simPlayoffDay(state: SeasonState, teams: Map<number, Team>, preplayed?: Map<number, GameResult>): PlayedGame[] {
   const { league } = state;
   const players = new Map(state.players.map((p) => [p.id, p]));
   const playoffs = league.playoffs!;
   const played: PlayedGame[] = [];
   let nextId = Math.max(league.season * 10000 + 9000, ...state.schedule.map((g) => g.id)) + 1;
   for (const series of activeSeries(playoffs)) {
-    const game = nextSeriesGame(series, nextId++, league.date);
-    state.schedule.push(game);
-    const pg = playGame(state, game, teams);
+    // A live game may already have been created for this series today.
+    let game = state.schedule.find((g) => g.seriesId === series.id && !g.played && g.date === league.date);
+    if (!game) {
+      game = nextSeriesGame(series, nextId++, league.date);
+      state.schedule.push(game);
+    }
+    const pg = playGame(state, game, teams, preplayed);
     applyWorkload(state, pg.result, false, players);
     applyInjuries(state, game, pg.result, players);
     const winner = game.homeScore! > game.awayScore! ? game.homeId : game.awayId;
@@ -262,7 +266,7 @@ function simPlayoffDay(state: SeasonState, teams: Map<number, Team>): PlayedGame
  * Simulate one day: regular-season games, or the next game of every active
  * playoff series. Moves preseason → regular → playoffs automatically.
  */
-export function simDay(state: SeasonState): PlayedGame[] {
+export function simDay(state: SeasonState, preplayed?: Map<number, GameResult>): PlayedGame[] {
   startSeason(state);
   if (state.league.phase === 'regular' && seasonOver(state)) startPlayoffs(state);
   const { league } = state;
@@ -271,7 +275,7 @@ export function simDay(state: SeasonState): PlayedGame[] {
   if (league.phase === 'playoffs') {
     if (playoffsOver(state)) return [];
     maintainRosters(state);
-    const played = simPlayoffDay(state, teams);
+    const played = simPlayoffDay(state, teams, preplayed);
     recover(state, 1);
     league.date = addDays(league.date, 1);
     return played;
@@ -284,7 +288,7 @@ export function simDay(state: SeasonState): PlayedGame[] {
   const players = new Map(state.players.map((p) => [p.id, p]));
   const played: PlayedGame[] = [];
   for (const game of today) {
-    const pg = playGame(state, game, teams);
+    const pg = playGame(state, game, teams, preplayed);
     const { result } = pg;
     const home = teams.get(game.homeId)!;
     const away = teams.get(game.awayId)!;
@@ -307,3 +311,49 @@ export function simDay(state: SeasonState): PlayedGame[] {
   return played;
 }
 
+
+export interface LiveSetup {
+  game: ScheduledGame;
+  away: TeamGameInput;
+  home: TeamGameInput;
+  useDH: boolean;
+  rng: Rng;
+  norms: RatingNorms;
+}
+
+/**
+ * If the user's team plays today, set up that game for live play (picks
+ * starters, creating the playoff game if needed). Returns null otherwise.
+ * Finish the day with `simDay(state, new Map([[game.id, result]]))`.
+ */
+export function prepareLiveGame(state: SeasonState): LiveSetup | null {
+  startSeason(state);
+  if (state.league.phase === 'regular' && seasonOver(state)) startPlayoffs(state);
+  const { league } = state;
+  const user = state.userTeamId;
+  let game: ScheduledGame | undefined;
+  if (league.phase === 'regular') {
+    game = state.schedule.find((g) => g.date === league.date && !g.played && (g.homeId === user || g.awayId === user));
+  } else if (league.phase === 'playoffs' && !playoffsOver(state)) {
+    const series = activeSeries(league.playoffs!).find((s) => s.highId === user || s.lowId === user);
+    if (series) {
+      game = state.schedule.find((g) => g.seriesId === series.id && !g.played && g.date === league.date);
+      if (!game) {
+        const nextId = Math.max(league.season * 10000 + 9000, ...state.schedule.map((g) => g.id)) + 1;
+        game = nextSeriesGame(series, nextId, league.date);
+        state.schedule.push(game);
+      }
+    }
+  }
+  if (!game) return null;
+  const teams = new Map(state.teams.map((t) => [t.id, t]));
+  maintainRosters(state);
+  return {
+    game,
+    away: teamInput(state, teams.get(game.awayId)!),
+    home: teamInput(state, teams.get(game.homeId)!),
+    useDH: league.settings.designatedHitter,
+    rng: new Rng(`${state.seed}-${league.season}-${game.id}`),
+    norms: (state.norms ??= computeNorms(state.players)),
+  };
+}

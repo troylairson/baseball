@@ -194,6 +194,9 @@ function GamesCard() {
       {next ? (
         <>
           <GameRow game={next} teamId={team.id} teams={teamMap} />
+          <Link to="/play/live" className="mt-2 flex h-10 items-center justify-center rounded-xl border border-line text-sm font-semibold hover:bg-surface-2">
+            Manage it live
+          </Link>
           <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
             {[team.id, next.homeId === team.id ? next.awayId : next.homeId].map((id) => {
               const sp = probable(id);

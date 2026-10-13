@@ -68,6 +68,19 @@ export function SimButton() {
       <BottomSheet open={menu} onClose={() => setMenu(false)} title="Simulate">
         <h2 className="mb-1 text-xl font-bold">Simulate</h2>
         <p className="mb-4 text-sm text-muted">Today is {formatDate(league.date)}.</p>
+        <button
+          onClick={() => {
+            setMenu(false);
+            navigate('/play/live');
+          }}
+          className="mb-2 flex w-full items-center gap-3 rounded-2xl bg-accent px-4 py-3 text-left text-accent-contrast"
+        >
+          <span className="flex-1">
+            <span className="block font-semibold">Manage next game live</span>
+            <span className="block text-sm opacity-80">Make the calls pitch by pitch</span>
+          </span>
+          <Icon name="games" className="size-5" />
+        </button>
         <ul className="flex flex-col gap-2">
           {options.map((o) => (
             <li key={o.mode}>

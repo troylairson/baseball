@@ -7,6 +7,7 @@ import { FrontOffice } from './screens/FrontOffice';
 import { Games } from './screens/Games';
 import { Home } from './screens/Home';
 import { League } from './screens/League';
+import { LiveGame } from './screens/LiveGame';
 import { NewCareer } from './screens/NewCareer';
 import { Offseason } from './screens/Offseason';
 import { Roster } from './screens/Roster';
@@ -43,6 +44,7 @@ export function App() {
           <Route path="free-agents" element={<FreeAgents />} />
           <Route path="trades" element={<Trades />} />
           <Route path="staff" element={<Staff />} />
+          <Route path="live" element={<LiveGame />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
