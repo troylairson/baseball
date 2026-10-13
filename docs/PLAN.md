@@ -254,7 +254,7 @@ src/
 
 ## 6. Roadmap
 
-> **Status:** Phases 0–3 are complete (see README). Phase 4 is next.
+> **Status:** Phases 0–4 (v1.0) are complete (see README). Remaining items are the P2 backlog.
 
 ### Phase 0 — Foundation (week 1)
 - Vite + React + TS + Tailwind scaffold; lint/format/test setup; CI.

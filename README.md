@@ -2,6 +2,10 @@
 
 A mobile-first, browser-based baseball management sim inspired by *Out of the Park Baseball*: simple to pick up, deep to master. See [`docs/PLAN.md`](docs/PLAN.md) for the research, feature list and roadmap.
 
+## Install & offline
+
+Diamond GM is a Progressive Web App: open it once in a browser and use "Add to Home Screen" / "Install app". It then works fully offline. Careers live in the browser's IndexedDB; use **Settings → Export career file** to back one up or move it to another device, and **Import career file** on the start screen to load it.
+
 ## Getting started
 
 ```bash
@@ -42,4 +46,5 @@ src/
 - **Phase 1 — Core sim:** done. Plate-appearance game engine (log5 batter/pitcher matchups, platoon splits, baserunning, steals, double plays, errors, pitcher fatigue and bullpen management, W/L/S decisions), balanced 162-game schedule, season simulation in the worker, box scores with play-by-play, league scores, stat leaders and player season stats. A calibration test keeps league totals MLB-like (≈4.4 R/G, .245 AVG, 22–23% K, ≈4.3 ERA); a full season sims in well under a second.
 - **Phase 2 — Playable career:** done. Editable lineup, batting order, positions, rotation and bullpen roles (or let the AI manage); call-ups and options with automatic roster legality. Seeded playoffs (division series, conference series, Diamond Series). A full offseason: season review with WAR-based awards and history, owner review and job security, aging/development/retirements, re-signing, AI-driven free agency, a scouted amateur draft, and a new season. Trades with an AI that values players by age, upside, contract and whether it's contending or rebuilding, with live feedback. News inbox, career stats, budgets.
 - **Phase 3 — Depth:** done. Injuries and the injured list (auto call-ups and activations); coaching staff, head trainer and scouting director you can hire and replace; a scouting budget that controls how accurate ratings on other teams' players, free agents and prospects are; service time with automatic pre-arb renewals, arbitration (tender / non-tender) and free agency after six years; contract extensions; a trade finder ("find me a package", shop a player) and AI-initiated trade offers; OPS+, ERA+, FIP, wOBA and WAR. Defense now develops and is normalized by era, keeping league offense stable over decades.
-- **Next — Phase 4:** live game view with tactical calls, onboarding tutorial, assistant GM recommendations, difficulty presets, PWA/offline install, save export/import, accessibility and performance passes.
+- **Phase 4 — Polish (v1.0):** done. Team strategy dials (baserunning, small ball, starter leash); a live game view where you manage pitch by pitch (steal, bunt, pinch hit, intentional walk, pitching changes); new-league settings (12–30 teams, 60/100/162 games, DH, difficulty); an assistant GM with one-tap suggestions and optional offseason/roster handling; a first-run welcome guide; installable offline PWA; career export/import; visible keyboard focus.
+- **Later (P2 / backlog):** 40-man roster and waivers, AA level, tradable draft picks, international signings, morale and chemistry, ticket pricing and fan interest, pitch types, All-Star break, Hall of Fame and record books, commissioner mode, online leagues.

@@ -138,3 +138,60 @@ export async function deleteSave(db: GameDB, saveId: string): Promise<void> {
     for (const table of db.saveTables) await table.where('saveId').equals(saveId).delete();
   });
 }
+
+/** Portable career file. Box scores are left out to keep files small. */
+export interface CareerExport {
+  format: 'diamond-gm-career';
+  version: 1;
+  exportedAt: number;
+  meta: SaveMeta;
+  league: League;
+  teams: Team[];
+  players: Player[];
+  games: ScheduledGame[];
+  stats: PlayerSeasonStats[];
+}
+
+export async function exportCareer(db: GameDB, saveId: string): Promise<CareerExport | null> {
+  const meta = await db.saves.get(saveId);
+  const league = await db.leagues.get(saveId);
+  if (!meta || !league) return null;
+  const [teams, players, games, stats] = await Promise.all([
+    db.teams.where('saveId').equals(saveId).toArray(),
+    db.players.where('saveId').equals(saveId).toArray(),
+    db.games.where('saveId').equals(saveId).toArray(),
+    db.stats.where('saveId').equals(saveId).toArray(),
+  ]);
+  return {
+    format: 'diamond-gm-career',
+    version: 1,
+    exportedAt: Date.now(),
+    meta,
+    league: strip(league),
+    teams: teams.map(strip),
+    players: players.map(strip),
+    games: games.map(strip),
+    stats: stats.map(strip),
+  };
+}
+
+/** Import a career file as a new save; returns its id. */
+export async function importCareer(db: GameDB, data: unknown): Promise<SaveMeta> {
+  const file = data as Partial<CareerExport>;
+  if (!file || file.format !== 'diamond-gm-career' || file.version !== 1 || !file.meta || !file.league
+    || !Array.isArray(file.teams) || !Array.isArray(file.players) || !Array.isArray(file.games) || !Array.isArray(file.stats)) {
+    throw new Error('That file is not a Diamond GM career.');
+  }
+  const now = Date.now();
+  const meta: SaveMeta = { ...file.meta, id: crypto.randomUUID(), name: `${file.meta.name} (imported)`, updatedAt: now };
+  const saveId = meta.id;
+  await db.transaction('rw', [db.saves, ...db.saveTables], async () => {
+    await db.saves.add(meta);
+    await db.leagues.add({ ...file.league!, saveId });
+    await db.teams.bulkAdd(file.teams!.map(tag(saveId)));
+    await db.players.bulkAdd(file.players!.map(tag(saveId)));
+    await db.games.bulkAdd(file.games!.map(tag(saveId)));
+    await db.stats.bulkAdd(file.stats!.map(tag(saveId)));
+  });
+  return meta;
+}

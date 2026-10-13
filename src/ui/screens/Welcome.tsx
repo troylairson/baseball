@@ -14,6 +14,19 @@ export function Welcome() {
     engine().listSaves().then(setSaves);
   }, []);
 
+  const [error, setError] = useState<string | null>(null);
+
+  const importFile = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    const res = await engine().importCareer(await file.text());
+    if (!res.ok) {
+      setError(res.reason);
+      return;
+    }
+    await resume(res.saveId);
+  };
+
   const resume = async (id: string) => {
     if (await load(id)) navigate('/play/home');
   };
@@ -29,6 +42,11 @@ export function Welcome() {
       <Link to="/new" className="flex h-14 items-center justify-center rounded-2xl bg-accent text-base font-semibold text-accent-contrast">
         New Career
       </Link>
+      <label className="mt-3 flex h-12 cursor-pointer items-center justify-center rounded-2xl border border-line text-sm font-semibold hover:bg-surface-2">
+        Import career file
+        <input type="file" accept="application/json,.json" className="sr-only" onChange={(e) => void importFile(e.target.files?.[0])} />
+      </label>
+      {error && <p className="mt-2 text-center text-sm text-danger" role="alert">{error}</p>}
 
       {saves && saves.length > 0 && (
         <section className="mt-8">

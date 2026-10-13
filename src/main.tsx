@@ -6,6 +6,9 @@ import { App } from './ui/App';
 
 initTheme();
 
+// Ask the browser not to evict saved careers under storage pressure.
+navigator.storage?.persist?.().catch(() => {});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

@@ -8,6 +8,7 @@ import { PlayerSheet } from '../screens/PlayerSheet';
 import { SettingsSheet } from '../screens/SettingsSheet';
 import { NAV_ITEMS } from './nav';
 import { Toast } from '../components/Toast';
+import { guideSeen, WelcomeGuide } from '../components/WelcomeGuide';
 import { SimButton, SimProgressBar } from './SimControls';
 import { BoxScoreSheet } from '../screens/BoxScoreSheet';
 
@@ -20,6 +21,7 @@ export function AppShell() {
 function Shell() {
   const [params, setParams] = useSearchParams();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(() => !guideSeen());
   const playerId = Number(params.get('p')) || null;
   const gameId = Number(params.get('g')) || null;
   const closeParam = useCallback((key: string) => {
@@ -44,7 +46,15 @@ function Shell() {
       <BottomNav />
       <BoxScoreSheet gameId={gameId} onClose={closeGame} />
       <PlayerSheet playerId={playerId} onClose={closePlayer} />
-      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onShowGuide={() => {
+          setSettingsOpen(false);
+          setGuideOpen(true);
+        }}
+      />
+      <WelcomeGuide open={guideOpen && !settingsOpen} onClose={() => setGuideOpen(false)} />
       <Toast />
     </div>
   );

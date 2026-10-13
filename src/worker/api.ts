@@ -6,7 +6,7 @@ import {
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
 import {
-  createSave, deleteSave, listSaves, loadBoxScore, loadCareerStats, loadSave, persistProgress, type LoadedSave,
+  createSave, deleteSave, exportCareer, importCareer, listSaves, loadBoxScore, loadCareerStats, loadSave, persistProgress, type LoadedSave,
 } from '../db/saves';
 
 export interface TeamPreview {
@@ -153,6 +153,20 @@ export function createEngineApi(db = new GameDB()) {
     },
 
     listSaves: () => listSaves(db),
+    /** JSON text of a career, ready to download. */
+    async exportCareer(saveId: string): Promise<string | null> {
+      if (session?.save.meta.id === saveId) await persistProgress(db, sync());
+      const data = await exportCareer(db, saveId);
+      return data ? JSON.stringify(data) : null;
+    },
+    async importCareer(json: string): Promise<{ ok: true; saveId: string } | { ok: false; reason: string }> {
+      try {
+        const meta = await importCareer(db, JSON.parse(json));
+        return { ok: true, saveId: meta.id };
+      } catch (e) {
+        return { ok: false, reason: e instanceof SyntaxError ? 'That file is not valid JSON.' : (e as Error).message };
+      }
+    },
     loadSave: open,
     async deleteSave(saveId: string) {
       if (session?.save.meta.id === saveId) session = null;
