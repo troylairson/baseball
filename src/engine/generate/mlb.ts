@@ -3,7 +3,6 @@ import type { BattingRatings, FieldPosition, PitchingRatings, Position } from '.
 import { FIELD_POSITIONS } from '../model/types';
 import { hashString, Rng } from '../rng';
 import { LEAGUE } from '../sim/pa';
-import { ARB_YEARS, FREE_AGENCY_YEARS, MIN_SALARY } from '../season/contracts';
 import { growBatting, growPitching, growthForAge } from './players';
 import type { RosterFile, RosterPlayer } from './rosterFile';
 
@@ -249,18 +248,6 @@ function ageOn(born: string, season: number): number {
   return season - y! - (m! > 6 ? 1 : 0);
 }
 
-/** Service time, salary and years remaining from career length (the feed has no contracts). */
-function contractFor(experience: number, ovr: number, age: number, rng: Rng): RosterPlayer['contract'] {
-  if (experience < ARB_YEARS) return { salary: MIN_SALARY + experience * 60, years: 1 };
-  const quality = Math.max(0, (ovr - 40) / 40);
-  const market = MIN_SALARY + quality ** 2.5 * 60000 * (0.85 + rng.next() * 0.3);
-  if (experience < FREE_AGENCY_YEARS) {
-    const share = [0.45, 0.6, 0.78][Math.min(2, experience - ARB_YEARS)]!;
-    return { salary: Math.max(MIN_SALARY, Math.round((market * share) / 10) * 10), years: 1 };
-  }
-  return { salary: Math.max(MIN_SALARY, Math.round(market / 10) * 10), years: rng.int(1, Math.max(1, Math.min(6, 36 - age))) };
-}
-
 /**
  * Regression squeezes ratings toward the middle. Stretch the ones the sim is
  * most sensitive to back to the spread of a generated league, keeping each
@@ -359,7 +346,6 @@ export function mlbPackToRoster(pack: MlbPack): RosterFile {
     // Completed big league seasons; a late-season debut doesn't count as a full year.
     const lateDebut = p.debut ? Number(p.debut.slice(5, 7)) >= 8 : false;
     const experience = debutYear ? Math.max(0, Math.min(15, start - debutYear - (lateDebut ? 1 : 0))) : 0;
-    const ovrGuess = pitching ? (pitching.stuff * 0.4 + pitching.control * 0.3 + pitching.movement * 0.3) : (batting.contact * 0.35 + batting.power * 0.3 + batting.eye * 0.25 + batting.speed * 0.1);
     return {
       firstName: p.first,
       lastName: p.last,
@@ -377,7 +363,6 @@ export function mlbPackToRoster(pack: MlbPack): RosterFile {
       pitching,
       pitchingPotential: pitching ? growPitching(pitching, growth, rng) : null,
       injuryProneness: Math.min(1, Math.max(0, rng.normal(p.status === 'D60' ? 0.45 : 0.3, 0.12))),
-      contract: contractFor(experience, ovrGuess, age, rng),
       experience,
     };
   });

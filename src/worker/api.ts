@@ -1,6 +1,6 @@
 import {
   addNews, addDays, advanceOffseason, beginOffseason, DEFAULT_SETTINGS, draftPlayer, ensureCareerDefaults, generateLeague,
-  acceptOffer, applyTrendAction, exportRoster, leagueFromRoster, mlbPackToRoster, parseRosterFile, type MlbPack, type TrendAction, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
+  acceptOffer, applyTrendAction, makeOffer, withdrawOffer, resolveRound, MARKET_ROUNDS, exportRoster, leagueFromRoster, mlbPackToRoster, parseRosterFile, type MlbPack, type TrendAction, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
   type SeasonState, type TeamStrategy, type TradeProposal, type AdviceAction, type GameResult, type LiveCommand, type LiveSituation, type PlayEvent,
 } from '../engine';
@@ -435,6 +435,35 @@ export function createEngineApi(db = new GameDB()) {
       const res = signFreeAgent(state, state.userTeamId, playerId);
       if (!res.ok) return res;
       return commit();
+    },
+
+    /** Free agency: make (or change) an offer. */
+    async marketOffer(offer: { playerId: number; salary: number; years: number }): Promise<ActionResult> {
+      const { state } = current();
+      const res = makeOffer(state, { ...offer, teamId: state.userTeamId });
+      return res.ok ? commit({ teamsOnly: true }) : res;
+    },
+
+    async marketWithdraw(playerId: number): Promise<ActionResult> {
+      withdrawOffer(current().state, playerId);
+      return commit({ teamsOnly: true });
+    },
+
+    /** End the current free agency round: clubs bid and players decide. */
+    async marketRound(): Promise<ActionResult> {
+      const { state } = current();
+      const market = state.league.market;
+      if (!market) return { ok: false, reason: 'Free agency is not open.' };
+      if (market.round > MARKET_ROUNDS) return { ok: false, reason: 'This was the last round. Continue to the draft.' };
+      const summary = resolveRound(state, market.round === MARKET_ROUNDS);
+      const byId = new Map(state.players.map((p) => [p.id, p]));
+      const teamName = (id: number) => state.teams.find((t) => t.id === id)?.city ?? 'another club';
+      const parts = [
+        ...summary.signed.map((id) => `${byId.get(id)!.lastName} signed with you`),
+        ...summary.lost.map((l) => `${byId.get(l.playerId)!.lastName} chose ${teamName(l.teamId)}`),
+      ];
+      const done = await commit();
+      return done.ok ? { ...done, message: parts.length ? `${parts.join('. ')}.` : 'Round over. No decisions on your offers yet.' } : done;
     },
 
     async draft(playerId: number): Promise<ActionResult> {

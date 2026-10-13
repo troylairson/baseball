@@ -57,7 +57,8 @@ export function moraleFactors(p: Player, state: Pick<SeasonState, 'teams' | 'pla
     else if (!expects && playing) factors.push({ label: 'Happy with his playing time', value: 6 });
   }
 
-  if (p.contract && contractStatus(p) !== 'pre-arb' && p.contract.years > 0) {
+  // Arbitration pays a set share of market value by design; only veterans on market deals compare.
+  if (p.contract && contractStatus(p) === 'free-agent' && p.contract.years > 0) {
     const fair = contractDemand(p).salary;
     if (p.contract.salary < fair * 0.6) {
       factors.push({ label: 'Feels underpaid', value: -Math.round(4 + Math.max(0, p.personality.greed - 50) / 5) });

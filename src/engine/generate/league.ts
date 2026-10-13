@@ -1,9 +1,10 @@
-import { overall } from '../model/ratings';
+
 import type { Conference, Division, League, LeagueSettings, Player, Position, Team } from '../model/types';
 import { Rng } from '../rng';
 import { FRANCHISES, TEAM_COLORS } from './names';
 import { topUpFreeAgents, softenDemands } from './freeAgents';
-import { estimateSalary, generatePlayer } from './players';
+import { generatePlayer } from './players';
+import { initialContract } from '../season/contracts';
 
 export const DEFAULT_SETTINGS: LeagueSettings = {
   name: 'Diamond League',
@@ -137,11 +138,7 @@ export function generateLeague(seed: number | string, settings: LeagueSettings =
 
   for (const player of players) {
     if (player.teamId === null) continue;
-    const ovr = overall(player);
-    player.contract = {
-      salary: estimateSalary(ovr, player.age, rng),
-      years: player.age < 26 ? rng.int(1, 3) : rng.int(1, Math.max(1, Math.min(6, 36 - player.age))),
-    };
+    player.contract = initialContract(player, rng);
   }
   topUpFreeAgents(players, teams.length, rng.fork('free-agents'));
   softenDemands(players);

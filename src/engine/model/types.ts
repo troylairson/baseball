@@ -86,6 +86,8 @@ export interface Player {
   retiredSeason?: number;
   /** Accumulated career stats and honors. */
   career?: import('../season/legacy').CareerTotals;
+  /** Club he last played for (free agents weigh a return). */
+  formerTeamId?: number;
   /** Has asked the user to trade him. */
   tradeRequested?: boolean;
 }
@@ -315,6 +317,8 @@ export interface League {
   /** Trade offers AI teams have made to the user. */
   offers?: TradeOffer[];
   nextOfferId?: number;
+  /** Offseason free agent market, while it is open. */
+  market?: import('../season/market').MarketState | null;
   /** All coaches/scouts, employed or available. */
   staff?: import('../season/staff').StaffMember[];
 }

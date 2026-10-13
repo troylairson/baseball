@@ -157,12 +157,3 @@ export function generatePlayer(spec: PlayerSpec, rng: Rng, usedNames?: Set<strin
     experience: spec.level === 'MLB' ? Math.max(0, age - rng.int(21, 25)) : 0,
   };
 }
-
-/** Rough salary (in $K) from overall rating and age-driven service level. */
-export function estimateSalary(ovr: number, age: number, rng: Rng): number {
-  const MIN = 760;
-  if (age < 26) return MIN + Math.round(rng.next() * 3) * 10;
-  const quality = Math.max(0, (ovr - 40) / 40);
-  const raw = MIN + quality ** 2.5 * 60000 * (0.8 + rng.next() * 0.4);
-  return Math.round(raw / 10) * 10;
-}

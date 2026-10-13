@@ -7,7 +7,8 @@ import { battingWar, leagueContext, pitchingWar } from '../model/war';
 import { developPlayer, retirementChance } from '../progression';
 import { hashString, Rng } from '../rng';
 import {
-  arbitrationAward, contractDemand, contractStatus, EXTENSION_THRESHOLD, extensionTerms, extensionWillingness, MIN_SALARY, preArbRenewal,
+  arbitrationAward, contractDemand, contractStatus, expectedWar, EXTENSION_THRESHOLD, extensionTerms, extensionWillingness, marketSalary, MIN_SALARY,
+  preArbRenewal, roleOf,
 } from './contracts';
 import { addNews } from './news';
 import { finalSeries } from './playoffs';
@@ -16,6 +17,7 @@ import { generateSchedule } from './schedule';
 import { staffCost, staffOffseason, staffRating } from './staff';
 import { refusesToResign } from './morale';
 import { snapshotCores } from './chemistry';
+import { closeMarket, openMarket } from './market';
 import { closeSeasonBooks, emptyFinances, nextBudget } from './finance';
 import { addSeasonToCareers, emptyCareer, hallOfFameVote, updateSeasonRecords } from './legacy';
 import { DRAFT_ROUNDS, pickId, pickOwner } from './picks';
@@ -221,6 +223,7 @@ function developAndRetire(state: SeasonState, rng: Rng): void {
 
 /** Tick contracts; expiring deals get a demand. AI teams decide on their own players. */
 function tickContracts(state: SeasonState, rng: Rng): void {
+  const decisions = new Map<number, Player[]>();
   for (const p of state.players) {
     if (p.retired || p.teamId === null || !p.contract) continue;
     p.contract.years--;
@@ -241,21 +244,38 @@ function tickContracts(state: SeasonState, rng: Rng): void {
     p.expiring = status;
     p.demand = status === 'arbitration' ? arbitrationAward(p) : contractDemand(p);
     if (mine) continue;
-    const ovr = overall(p);
-    const keep = status === 'arbitration'
-      ? ovr >= 46 || overall(p, true) >= 55
-      : ovr >= 48 && p.age <= 33 && rng.chance(0.6);
-    if (keep) {
-      p.contract = p.demand;
-      p.demand = null;
-      p.expiring = null;
-    } else {
-      releaseToFreeAgency(p);
+    const list = decisions.get(p.teamId) ?? [];
+    list.push(p);
+    decisions.set(p.teamId, list);
+  }
+
+  // Each AI club keeps the players who are worth their price, best value first, within budget.
+  for (const [teamId, expiring] of decisions) {
+    const team = state.teams.find((t) => t.id === teamId)!;
+    let committed = state.players
+      .filter((p) => p.teamId === teamId && !p.retired && p.contract && p.contract.years > 0)
+      .reduce((sum, p) => sum + p.contract!.salary, 0) + staffCost(state.league, team);
+    // Leave room to shop: clubs don't spend the whole budget on their own free agents.
+    const room = nextBudget(team) * 0.85;
+    const worth = (p: Player) => marketSalary(expectedWar(p), roleOf(p)) / p.demand!.salary;
+    for (const p of expiring.sort((a, b) => worth(b) - worth(a))) {
+      const arb = p.expiring === 'arbitration';
+      // Arbitration-eligible players are usually bargains; veterans must be worth market price.
+      const wanted = arb ? worth(p) >= 1 || overall(p, true) >= 55 : worth(p) >= 0.95 && p.age <= 34 && rng.chance(0.55);
+      if (wanted && committed + p.demand!.salary <= room) {
+        committed += p.demand!.salary;
+        p.contract = p.demand!;
+        p.demand = null;
+        p.expiring = null;
+      } else {
+        releaseToFreeAgency(p);
+      }
     }
   }
 }
 
 function releaseToFreeAgency(p: Player): void {
+  if (p.teamId !== null) p.formerTeamId = p.teamId;
   p.teamId = null;
   p.level = 'MLB';
   p.contract = null;
@@ -299,6 +319,7 @@ export type SignResult = { ok: true } | { ok: false; reason: string };
 export function signFreeAgent(state: SeasonState, teamId: number, playerId: number): SignResult {
   const p = state.players.find((x) => x.id === playerId);
   if (!p || p.teamId !== null || p.retired || p.draftProspect) return { ok: false, reason: 'That player is not a free agent.' };
+  if (state.league.market && teamId === state.userTeamId) return { ok: false, reason: 'Free agency is open: make him an offer instead.' };
   const demand = p.demand ?? contractDemand(p);
   p.teamId = teamId;
   p.contract = { ...demand };
@@ -322,7 +343,6 @@ export function signFreeAgent(state: SeasonState, teamId: number, playerId: numb
   return { ok: true };
 }
 
-/** One pass of AI signings; each AI team signs at most one player per pass. */
 /** The best affordable free agent who clearly upgrades a team's active roster. */
 export function bestSigningFor(state: SeasonState, team: Team, exclude: Set<number> = new Set()): Player | undefined {
   const pool = freeAgents(state.players).sort((a, b) => overall(b) - overall(a));
@@ -340,23 +360,32 @@ export function bestSigningFor(state: SeasonState, team: Team, exclude: Set<numb
   return undefined;
 }
 
-function aiFreeAgencyRound(state: SeasonState, rng: Rng): number {
-  const taken = new Set<number>();
-  let signed = 0;
-  for (const team of rng.shuffle(state.teams.filter((t) => t.id !== state.userTeamId))) {
-    const fa = bestSigningFor(state, team, taken);
-    if (!fa) continue;
-    taken.add(fa.id);
-    signFreeAgent(state, team.id, fa.id);
-    signed++;
+const isDepthPlayer = (p: Player) => (p.demand ?? contractDemand(p)).salary <= MIN_SALARY * 2.5;
+
+/**
+ * Spring: regulars still unsigned have lowered their asks to one-year deals;
+ * AI clubs with a need and the budget pick them up.
+ */
+function springSignings(state: SeasonState, rng: Rng): void {
+  for (let pass = 0; pass < 3; pass++) {
+    let signed = 0;
+    // Worst records pick first, like waiver priority.
+    const order = state.teams.filter((t) => t.id !== state.userTeamId).sort((a, b) => a.wins - b.wins || rng.next() - 0.5);
+    for (const team of order) {
+      const fa = bestSigningFor(state, team);
+      if (!fa || isDepthPlayer(fa)) continue;
+      signFreeAgent(state, team.id, fa.id);
+      signed++;
+    }
+    if (!signed) break;
   }
-  return signed;
 }
 
 /** AI teams top up thin farm systems with cheap depth. */
 function aiDepthSignings(state: SeasonState): void {
+  // Depth means players who'd take a minimum deal, not unsigned regulars.
   const pool = freeAgents(state.players)
-    .filter((p) => p.age <= 30)
+    .filter((p) => p.age <= 30 && isDepthPlayer(p))
     .sort((a, b) => overall(b, true) - overall(a, true));
   for (const team of state.teams) {
     if (team.id === state.userTeamId) continue;
@@ -478,12 +507,12 @@ export function advanceOffseason(state: SeasonState): number[] {
       return [];
     case 'resign':
       for (const p of expiringFor(state, state.userTeamId)) releaseToFreeAgency(p);
-      aiFreeAgencyRound(state, rng);
+      openMarket(state);
       league.offseason = 'freeAgency';
       league.date = `${league.season}-12-01`;
       return [];
     case 'freeAgency':
-      for (let i = 0; i < 6 && aiFreeAgencyRound(state, rng) > 0; i++);
+      closeMarket(state);
       aiDepthSignings(state);
       generateDraftClass(state, rng);
       league.draft = { picks: createDraftOrder(state), current: 0 };
@@ -513,7 +542,7 @@ function fillOrgNeeds(state: SeasonState, teamId: number): number {
   for (const [position, match, min] of ORG_NEEDS) {
     while (org(state, teamId).filter(match).length < min) {
       // Nobody left on the market: a career minor leaguer is always available.
-      const fa = freeAgents(state.players).filter(match).sort((a, b) => overall(b) - overall(a))[0] ?? replacementPlayer(state, position);
+      const fa = freeAgents(state.players).filter((p) => match(p) && isDepthPlayer(p)).sort((a, b) => overall(b) - overall(a))[0] ?? replacementPlayer(state, position);
       fa.teamId = teamId;
       fa.level = 'AAA';
       fa.contract = { salary: Math.min(fa.demand?.salary ?? MIN_SALARY, MIN_SALARY * 2), years: 1 };
@@ -583,8 +612,9 @@ export function startNewSeason(state: SeasonState, rng: Rng): number[] {
     }
   }
 
+  for (const t of state.teams) t.budget = nextBudget(t);
+  springSignings(state, rng.fork('spring'));
   for (const t of state.teams) {
-    t.budget = nextBudget(t);
     t.finances = emptyFinances(league.season);
     t.wins = 0;
     t.losses = 0;

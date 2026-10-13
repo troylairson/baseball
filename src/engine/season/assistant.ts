@@ -1,9 +1,10 @@
 import { isPitcher, overall } from '../model/ratings';
 import type { Player } from '../model/types';
-import { contractStatus, EXTENSION_THRESHOLD, extensionWillingness } from './contracts';
+import { contractDemand, contractStatus, EXTENSION_THRESHOLD, extensionWillingness } from './contracts';
 import {
-  bestSigningFor, expiringFor, letPlayerGo, payroll, payrollBudget, resignPlayer, runDraft, signFreeAgent,
+  bestSigningFor, expiringFor, letPlayerGo, payroll, payrollBudget, resignPlayer, runDraft,
 } from './offseason';
+import { makeOffer } from './market';
 import type { SeasonState } from './season';
 import { staffCost } from './staff';
 
@@ -71,7 +72,7 @@ export function assistantAdvice(state: SeasonState): Advice[] {
     }
   }
 
-  if (league.phase !== 'playoffs') {
+  if (league.phase !== 'playoffs' && !league.market) {
     const fa = bestSigningFor(state, team);
     if (fa) {
       advice.push({
@@ -112,11 +113,14 @@ export function assistantHandleStage(state: SeasonState): string[] {
       }
     }
   } else if (league.offseason === 'freeAgency') {
+    // Bid on the best fits at their asking price; the market decides at the end of the round.
+    const taken = new Set((league.market?.offers ?? []).map((o) => o.playerId));
     for (let i = 0; i < 2; i++) {
-      const fa = bestSigningFor(state, team);
+      const fa = bestSigningFor(state, team, taken);
       if (!fa) break;
-      signFreeAgent(state, team.id, fa.id);
-      done.push(`Signed ${name(fa)}`);
+      taken.add(fa.id);
+      const ask = fa.demand ?? contractDemand(fa);
+      if (makeOffer(state, { playerId: fa.id, teamId: team.id, salary: ask.salary, years: ask.years }).ok) done.push(`Offered ${name(fa)} ${ask.years} yr at $${(ask.salary / 1000).toFixed(1)}M`);
     }
   } else if (league.offseason === 'draft') {
     runDraft(state, true);

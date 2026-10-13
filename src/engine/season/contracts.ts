@@ -26,19 +26,63 @@ export function preArbRenewal(p: Player): Contract {
   return { salary: MIN_SALARY + (p.experience ?? 0) * 60, years: 1 };
 }
 
+/** Market price of one win above replacement, in $K (scaled to the game's payrolls). */
+export const DOLLARS_PER_WAR = 6500;
+
+/** Wins above replacement a player of this rating produces in a full season in his role. */
+export function warForRating(ovr: number, role: 'H' | 'SP' | 'RP'): number {
+  if (role === 'SP') return (ovr - 45) * 0.27;
+  if (role === 'RP') return (ovr - 47) * 0.11;
+  return (ovr - 48) * 0.35;
+}
+
+export const roleOf = (p: Pick<Player, 'position'>): 'H' | 'SP' | 'RP' => (p.position === 'SP' ? 'SP' : p.position === 'RP' ? 'RP' : 'H');
+
+/** Expected WAR per season at the player's current rating. */
+export function expectedWar(p: Player): number {
+  return warForRating(overall(p), roleOf(p));
+}
+
+/** What a season of this player is worth on the open market, before personality and age. */
+export function marketSalary(war: number, role: 'H' | 'SP' | 'RP'): number {
+  // Teams pay relievers a premium for high-leverage innings.
+  const price = DOLLARS_PER_WAR * (role === 'RP' ? 1.7 : 1);
+  return MIN_SALARY + price * Math.max(0, war) ** 1.05;
+}
+
+/** Contract length a player can command: stars in their twenties get long deals. */
+export function contractYears(war: number, age: number): number {
+  if (war >= 4) return Math.max(1, Math.min(10, 36 - age));
+  if (war >= 2.5) return age <= 27 ? 6 : age <= 29 ? 5 : age <= 30 ? 4 : age <= 32 ? 3 : age <= 34 ? 2 : 1;
+  if (war >= 1.2) return age <= 29 ? 3 : age <= 32 ? 2 : 1;
+  return war > 0.6 && age <= 28 ? 2 : 1;
+}
+
 /**
  * What a player asks for on a new deal (in $K / years). Deterministic so the
  * UI can show it without an RNG; greedier players ask for more.
  */
 export function contractDemand(p: Player): Contract {
-  const ovr = overall(p);
-  const quality = Math.max(0, (ovr - 40) / 40);
+  const war = expectedWar(p);
   const greed = 1 + (p.personality.greed - 50) / 150;
-  // Prime-age players get a premium; old players a discount.
-  const ageMul = p.age <= 30 ? 1 : Math.max(0.5, 1 - (p.age - 30) * 0.08);
-  const salary = Math.max(MIN_SALARY, Math.round((MIN_SALARY + quality ** 2.5 * 60000 * greed * ageMul) / 10) * 10);
-  const years = ovr < 45 ? 1 : p.age <= 27 ? 5 : p.age <= 30 ? 4 : p.age <= 32 ? 3 : p.age <= 34 ? 2 : 1;
-  return { salary, years };
+  // Teams pay less for players past their prime.
+  const ageMul = p.age <= 30 ? 1 : Math.max(0.45, 1 - (p.age - 30) * 0.08);
+  const salary = Math.max(MIN_SALARY, Math.round((marketSalary(war, roleOf(p)) * greed * ageMul) / 10) * 10);
+  return { salary, years: contractYears(war, p.age) };
+}
+
+/**
+ * A plausible existing contract for a player in a new league, by service
+ * time: pre-arbitration minimums, arbitration shares, or a market deal
+ * signed some years ago with time left on it.
+ */
+export function initialContract(p: Player, rng: { next: () => number; int: (a: number, b: number) => number }): Contract {
+  const status = contractStatus(p);
+  if (status === 'pre-arb') return preArbRenewal(p);
+  if (status === 'arbitration') return arbitrationAward(p);
+  const demand = contractDemand(p);
+  const salary = Math.max(MIN_SALARY, Math.round((demand.salary * (0.8 + rng.next() * 0.4)) / 10) * 10);
+  return { salary, years: rng.int(1, Math.max(1, Math.min(demand.years, 7))) };
 }
 
 /** Rough surplus value of a player for trades and roster decisions. */

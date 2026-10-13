@@ -1,14 +1,14 @@
-import { clampRating, isPitcher, overall } from '../model/ratings';
+import { clampRating, isPitcher } from '../model/ratings';
 import type {
   BattingRatings, Conference, Division, FieldPosition, League, LeagueSettings, PitchingRatings, Player, Position, Team,
 } from '../model/types';
 import { FIELD_POSITIONS } from '../model/types';
 import { Rng } from '../rng';
-import { contractDemand, MIN_SALARY } from '../season/contracts';
+import { contractDemand, initialContract, MIN_SALARY } from '../season/contracts';
 import { fixRoster } from '../season/roster';
 import { softenDemands, topUpFreeAgents } from './freeAgents';
 import { DEFAULT_SETTINGS, START_SEASON, type GeneratedLeague } from './league';
-import { estimateSalary, generatePlayer } from './players';
+import { generatePlayer } from './players';
 
 /**
  * A league's teams and players as a portable file: export one from a career,
@@ -227,7 +227,7 @@ export function leagueFromRoster(
     if (team) {
       p.contract = r.contract && r.contract.salary > 0
         ? { salary: Math.max(MIN_SALARY, Math.round(r.contract.salary)), years: Math.max(1, Math.round(r.contract.years)) }
-        : { salary: estimateSalary(overall(p), p.age, rng), years: p.age < 26 ? rng.int(1, 3) : rng.int(1, Math.max(1, Math.min(5, 36 - p.age))) };
+        : initialContract(p, rng);
     } else {
       p.demand = contractDemand(p);
     }
