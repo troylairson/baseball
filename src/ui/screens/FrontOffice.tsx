@@ -8,6 +8,7 @@ import { useOpenPlayer } from '../hooks';
 import { scoutedOverall } from '../scouting';
 import { payroll, payrollBudget, spending } from '../teams';
 import { BudgetBar } from '../components/BudgetBar';
+import { FinancesCard } from '../components/FinancesCard';
 
 const STATUS_LABEL = { 'pre-arb': 'Pre-arb', arbitration: 'Arb', 'free-agent': 'FA' } as const;
 
@@ -40,6 +41,8 @@ export function FrontOffice() {
             <div className="flex justify-between"><dt className="text-muted">Staff & scouting</dt><dd className="tabular-nums">{money(spend - pay)}</dd></div>
           </dl>
         </Card>
+
+        <FinancesCard team={team} />
 
         <Card title="Tools">
           <ul className="-mx-2">

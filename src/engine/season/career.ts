@@ -2,6 +2,7 @@ import type { Player } from '../model/types';
 import { addNews } from './news';
 import { marketBudget, setOwnerTargets } from './offseason';
 import { ensureStaff } from './staff';
+import { ensureFinances } from './finance';
 import type { SeasonState } from './season';
 
 /**
@@ -17,6 +18,7 @@ export function ensureCareerDefaults(state: SeasonState): void {
   league.offseason ??= null;
   league.draft ??= null;
   ensureStaff(league, state.teams, state.seed);
+  ensureFinances(state);
   for (const t of state.teams) {
     if (t.budget === undefined) {
       const pay = state.players.filter((p) => p.teamId === t.id && !p.retired).reduce((s, p) => s + (p.contract?.salary ?? 0), 0);

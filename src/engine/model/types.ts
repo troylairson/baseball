@@ -118,6 +118,12 @@ export interface Team {
   strategy?: TeamStrategy;
   /** Let the assistant GM make call-ups/options to keep the best players active. */
   autoRoster?: boolean;
+  /** 0–100 fan enthusiasm; drives attendance and merchandise. */
+  fanInterest?: number;
+  /** Index into TICKET_LEVELS (0 bargain … 4 premium). */
+  ticketPrice?: number;
+  finances?: import('../season/finance').SeasonFinances;
+  lastFinances?: import('../season/finance').SeasonFinances;
 }
 
 /** 0 = low, 1 = balanced, 2 = high for each dial. */
@@ -287,6 +293,8 @@ export interface League {
   owner?: OwnerState;
   /** Owners of traded picks, keyed by pick id (season-round-originalTeam). */
   pickOwners?: Record<string, number>;
+  /** Last date fan interest was updated. */
+  fansDate?: string;
   /** Last date morale was updated. */
   moraleDate?: string;
   /** Trade offers AI teams have made to the user. */

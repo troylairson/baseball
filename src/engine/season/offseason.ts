@@ -14,6 +14,7 @@ import { fixRoster } from './roster';
 import { generateSchedule } from './schedule';
 import { staffCost, staffOffseason, staffRating } from './staff';
 import { refusesToResign } from './morale';
+import { closeSeasonBooks, emptyFinances, nextBudget } from './finance';
 import { DRAFT_ROUNDS, pickId, pickOwner } from './picks';
 import type { SeasonState } from './season';
 
@@ -162,6 +163,7 @@ export function beginOffseason(state: SeasonState): void {
     const p = byId.get(a.playerId)!;
     addNews(league, { kind: 'award', title: `${fullName(p)} wins the ${a.name}`, body: a.summary, playerId: p.id, teamId: a.teamId ?? undefined, mine: a.teamId === state.userTeamId });
   }
+  closeSeasonBooks(state);
   ownerReview(state);
 
   // Experience counts for players who saw real playing time.
@@ -571,6 +573,8 @@ export function startNewSeason(state: SeasonState, rng: Rng): number[] {
   }
 
   for (const t of state.teams) {
+    t.budget = nextBudget(t);
+    t.finances = emptyFinances(league.season);
     t.wins = 0;
     t.losses = 0;
     t.runsScored = 0;

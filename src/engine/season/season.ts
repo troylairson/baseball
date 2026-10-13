@@ -9,6 +9,7 @@ import { addNews } from './news';
 import { fixRoster, rosterIssues } from './roster';
 import { staffRating } from './staff';
 import { updateMorale } from './morale';
+import { recordHomeGate, updateFans } from './finance';
 import { maybeMakeOffer } from './trades';
 import {
   activeSeries, advanceBracket, createPlayoffs, nextSeriesGame, recordSeriesGame, roundName,
@@ -235,6 +236,7 @@ function simPlayoffDay(state: SeasonState, teams: Map<number, Team>, preplayed?:
     const pg = playGame(state, game, teams, preplayed);
     applyWorkload(state, pg.result, false, players);
     applyInjuries(state, game, pg.result, players);
+    recordHomeGate(teams.get(game.homeId)!, league.season, true);
     const winner = game.homeScore! > game.awayScore! ? game.homeId : game.awayId;
     recordSeriesGame(series, winner);
     if (series.winnerId !== null) {
@@ -286,6 +288,7 @@ export function simDay(state: SeasonState, preplayed?: Map<number, GameResult>):
   if (league.phase !== 'regular') return [];
   maintainRosters(state);
   updateMorale(state);
+  updateFans(state);
   maybeMakeOffer(state, new Rng(`${state.seed}-offer-${league.date}`));
 
   const today = state.schedule.filter((g) => g.date === league.date && !g.played);
@@ -305,6 +308,7 @@ export function simDay(state: SeasonState, preplayed?: Map<number, GameResult>):
     away.runsAllowed += result.home.runs;
     applyWorkload(state, result, true, players);
     applyInjuries(state, game, result, players);
+    recordHomeGate(home, league.season, false);
     played.push(pg);
   }
 

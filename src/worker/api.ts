@@ -347,6 +347,11 @@ export function createEngineApi(db = new GameDB()) {
       return commit();
     },
 
+    async setTicketPrice(level: number): Promise<ActionResult> {
+      user().ticketPrice = Math.max(0, Math.min(4, Math.round(level)));
+      return commit();
+    },
+
     async setAutoRoster(on: boolean): Promise<ActionResult> {
       user().autoRoster = on;
       return commit();
