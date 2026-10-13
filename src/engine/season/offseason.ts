@@ -14,9 +14,10 @@ import { fixRoster } from './roster';
 import { generateSchedule } from './schedule';
 import { staffCost, staffOffseason, staffRating } from './staff';
 import { refusesToResign } from './morale';
+import { DRAFT_ROUNDS, pickId, pickOwner } from './picks';
 import type { SeasonState } from './season';
 
-export const DRAFT_ROUNDS = 4;
+export { DRAFT_ROUNDS } from './picks';
 const MAX_AAA = 22;
 
 const fullName = (p: Player) => `${p.firstName} ${p.lastName}`;
@@ -381,7 +382,10 @@ function createDraftOrder(state: SeasonState): DraftPick[] {
   const order = [...state.teams].sort((a, b) => a.wins - b.wins || (a.runsScored - a.runsAllowed) - (b.runsScored - b.runsAllowed));
   const picks: DraftPick[] = [];
   for (let round = 1; round <= DRAFT_ROUNDS; round++) {
-    for (const team of order) picks.push({ overall: picks.length + 1, round, teamId: team.id, playerId: null });
+    for (const team of order) {
+      const owner = pickOwner(state.league, pickId({ season: state.league.season, round, originalTeamId: team.id }));
+      picks.push({ overall: picks.length + 1, round, teamId: owner, originalTeamId: team.id, playerId: null });
+    }
   }
   return picks;
 }
@@ -541,6 +545,9 @@ export function startNewSeason(state: SeasonState, rng: Rng): number[] {
   const removedSet = new Set(removed);
   state.players = state.players.filter((p) => !removedSet.has(p.id));
 
+  league.pickOwners = Object.fromEntries(
+    Object.entries(league.pickOwners ?? {}).filter(([id]) => Number(id.split('-')[0]) > league.season),
+  );
   league.season++;
   league.phase = 'preseason';
   league.offseason = null;

@@ -294,7 +294,10 @@ function Draft() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold">You're on the clock</p>
-                  <p className="text-sm text-muted">Round {pick.round}, pick #{pick.overall}</p>
+                  <p className="text-sm text-muted">
+                    Round {pick.round}, pick #{pick.overall}
+                    {pick.originalTeamId !== undefined && pick.originalTeamId !== team.id ? ` (from ${teamMap.get(pick.originalTeamId)?.abbr})` : ''}
+                  </p>
                 </div>
                 <button onClick={() => void act(() => api().autoPick())} className="h-10 rounded-full border border-line bg-surface px-4 text-sm font-medium">Auto-pick</button>
               </div>

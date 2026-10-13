@@ -4,6 +4,7 @@ import { playerValue } from './contracts';
 import { addNews } from './news';
 import { payroll, payrollBudget, teamStrength } from './offseason';
 import { fixRoster } from './roster';
+import { parsePickId, pickLabel, pickOwner, picksTradeable, pickValue } from './picks';
 
 export interface TradeProposal {
   partnerId: number;
@@ -11,6 +12,9 @@ export interface TradeProposal {
   give: number[];
   /** Players the user receives. */
   get: number[];
+  /** Draft pick ids (see picks.ts) the user sends / receives. */
+  givePicks?: string[];
+  getPicks?: string[];
 }
 
 export interface TradeEvaluation {
@@ -61,13 +65,19 @@ export function evaluateTrade(ctx: TradeContext, proposal: TradeProposal): Trade
   const contending = mode === 'contending';
   const no = (message: string, score = 0): TradeEvaluation => ({ accepted: false, score, message, partnerMode: mode });
 
+  const givePicks = proposal.givePicks ?? [];
+  const getPicks = proposal.getPicks ?? [];
   const window = tradeWindowOpen(ctx.league);
   if (!window.open) return no(window.reason!);
-  if (give.length === 0 && get.length === 0) return no('Add players to build a deal.');
+  if (give.length + givePicks.length === 0 && get.length + getPicks.length === 0) return no('Add players or picks to build a deal.');
   if (give.some((p) => p.teamId !== ctx.userTeamId) || get.some((p) => p.teamId !== proposal.partnerId)) {
     return no('Those players are no longer available.');
   }
-  if (get.length === 0) return no('Pick at least one of their players.');
+  if ((givePicks.length || getPicks.length) && !picksTradeable(ctx.league)) return no('Picks can’t be traded once the draft has started.');
+  if (givePicks.some((id) => pickOwner(ctx.league, id) !== ctx.userTeamId) || getPicks.some((id) => pickOwner(ctx.league, id) !== proposal.partnerId)) {
+    return no('Those picks are no longer available.');
+  }
+  if (get.length + getPicks.length === 0) return no('Ask for at least one of their players or picks.');
 
   // Roster sanity for the partner: never leave them without starters or catchers.
   const partnerOrg = ctx.players.filter((p) => p.teamId === proposal.partnerId && !p.retired);
@@ -83,10 +93,13 @@ export function evaluateTrade(ctx: TradeContext, proposal: TradeProposal): Trade
     return no(`That adds too much salary — they're near their budget.`);
   }
 
-  const valueIn = sumValue(give, contending);
-  const valueOut = sumValue(get, contending);
+  const picksValue = (ids: string[]) => ids.reduce((sum, id) => sum + pickValue(ctx.teams, parsePickId(id), contending), 0);
+  const valueIn = sumValue(give, contending) + picksValue(givePicks);
+  const valueOut = sumValue(get, contending) + picksValue(getPicks);
   // AI teams want to win the trade, and value quality over quantity.
-  const depthDiscount = give.length > get.length ? 0.85 ** (give.length - get.length) : 1;
+  const assetsIn = give.length + givePicks.length;
+  const assetsOut = get.length + getPicks.length;
+  const depthDiscount = assetsIn > assetsOut ? 0.85 ** (assetsIn - assetsOut) : 1;
   // Harder difficulties make the AI demand a bigger win from every deal.
   const [margin, floor] = ([[1.02, 1], [1.12, 3], [1.25, 5]] as const)[ctx.league.settings.difficulty ?? 1];
   const needed = valueOut * margin + floor;
@@ -110,15 +123,19 @@ export function executeTrade(ctx: TradeContext, proposal: TradeProposal): TradeR
   const get = proposal.get.map((id) => byId.get(id)!);
   for (const p of give) p.teamId = proposal.partnerId;
   for (const p of get) p.teamId = ctx.userTeamId;
+  ctx.league.pickOwners ??= {};
+  for (const id of proposal.givePicks ?? []) ctx.league.pickOwners[id] = proposal.partnerId;
+  for (const id of proposal.getPicks ?? []) ctx.league.pickOwners[id] = ctx.userTeamId;
   for (const teamId of [ctx.userTeamId, proposal.partnerId]) {
     fixRoster(ctx.players.filter((p) => p.teamId === teamId && !p.retired), teamId !== ctx.userTeamId);
   }
   const partner = ctx.teams.find((t) => t.id === proposal.partnerId)!;
-  const names = (list: Player[]) => list.map((p) => `${p.firstName} ${p.lastName}`).join(', ') || 'nothing';
+  const names = (list: Player[], picks: string[] = []) =>
+    [...list.map((p) => `${p.firstName} ${p.lastName}`), ...picks.map((id) => pickLabel(ctx.teams, parsePickId(id)).replace(/ · proj.*$/, '') + ' pick')].join(', ') || 'nothing';
   addNews(ctx.league, {
     kind: 'transaction',
     title: `Trade with ${partner.city}`,
-    body: `Acquired ${names(get)} for ${names(give)}.`,
+    body: `Acquired ${names(get, proposal.getPicks)} for ${names(give, proposal.givePicks)}.`,
     teamId: partner.id,
     playerId: get.sort((a, b) => overall(b) - overall(a))[0]?.id,
     mine: true,

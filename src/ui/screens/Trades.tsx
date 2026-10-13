@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
-import { evaluateTrade, isPitcher, shopPlayer, suggestPackage, teamMode, tradeWindowOpen, type Player, type Team } from '../../engine';
+import {
+  evaluateTrade, isPitcher, parsePickId, pickId, pickLabel, pickOwner, picksOwnedBy, shopPlayer, suggestPackage, teamMode, tradeWindowOpen,
+  type Player, type Team,
+} from '../../engine';
 import { api, useGame, useSave, useUserTeam } from '../../state/game';
 import { BottomSheet } from '../components/BottomSheet';
 import { Card, PageHeader } from '../components/Card';
@@ -65,10 +68,13 @@ function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { 
   const openPlayer = useOpenPlayer();
   const [give, setGive] = useState<number[]>(initial.give);
   const [get, setGet] = useState<number[]>(initial.get);
+  const [givePicks, setGivePicks] = useState<string[]>([]);
+  const [getPicks, setGetPicks] = useState<string[]>([]);
   const [picking, setPicking] = useState<'give' | 'get' | null>(null);
   const byId = useMemo(() => new Map(save.players.map((p) => [p.id, p])), [save.players]);
   const ctx = { league: save.league, teams: save.teams, players: save.players, userTeamId: team.id };
-  const evaluation = evaluateTrade(ctx, { partnerId: partner.id, give, get });
+  const proposal = { partnerId: partner.id, give, get, givePicks, getPicks };
+  const evaluation = evaluateTrade(ctx, proposal);
 
   const findDeal = () => {
     const pkg = suggestPackage(ctx, partner.id, get);
@@ -77,20 +83,31 @@ function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { 
   };
 
   const propose = async () => {
-    const err = await act(() => api().trade({ partnerId: partner.id, give, get }));
+    const err = await act(() => api().trade(proposal));
     if (!err) {
       showToast(`Trade completed with ${partner.city}.`);
       setGive([]);
       setGet([]);
+      setGivePicks([]);
+      setGetPicks([]);
     }
   };
 
-  const side = (title: string, ids: number[], set: (ids: number[]) => void, which: 'give' | 'get') => (
+  const side = (title: string, ids: number[], set: (ids: number[]) => void, which: 'give' | 'get', picks: string[], setPicks: (ids: string[]) => void) => (
     <Card title={title} action={<button onClick={() => setPicking(which)} className="text-sm font-semibold text-accent">+ Add</button>} className="px-2 sm:px-4">
-      {ids.length === 0 ? (
-        <button onClick={() => setPicking(which)} className="w-full rounded-xl border border-dashed border-line px-3 py-6 text-sm text-muted">Add players</button>
+      {ids.length + picks.length === 0 ? (
+        <button onClick={() => setPicking(which)} className="w-full rounded-xl border border-dashed border-line px-3 py-6 text-sm text-muted">Add players or picks</button>
       ) : (
         <ul>
+          {picks.map((id) => (
+            <li key={id} className="flex items-center gap-2 border-t border-line py-2 first:border-t-0">
+              <span className="grid w-7 place-items-center text-muted"><Icon name="draft" className="size-4" /></span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{pickLabel(save.teams, parsePickId(id), pickOwner(save.league, id))}</span>
+              <button onClick={() => setPicks(picks.filter((x) => x !== id))} className="grid size-9 place-items-center rounded-full text-muted hover:bg-surface-2" aria-label="Remove pick">
+                <Icon name="close" className="size-4" />
+              </button>
+            </li>
+          ))}
           {ids.map((id) => {
             const p = byId.get(id)!;
             const { ovr, pot } = scoutedOverall(p, team.id);
@@ -130,8 +147,8 @@ function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { 
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        {side('You give', give, setGive, 'give')}
-        {side('You get', get, setGet, 'get')}
+        {side('You give', give, setGive, 'give', givePicks, setGivePicks)}
+        {side('You get', get, setGet, 'get', getPicks, setGetPicks)}
       </div>
       <div className="pb-safe sticky bottom-20 z-20 mt-4 rounded-2xl border border-line bg-surface p-4 shadow-lg md:bottom-4">
         <div className="mb-1 flex justify-between text-xs text-muted"><span>Their interest</span><span>{evaluation.accepted ? 'Deal!' : `${pct}%`}</span></div>
@@ -158,6 +175,9 @@ function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { 
         selected={picking === 'give' ? give : get}
         userTeamId={team.id}
         onChange={(ids) => (picking === 'give' ? setGive(ids) : setGet(ids))}
+        picks={picking ? picksOwnedBy(save.league, save.teams, picking === 'give' ? team.id : partner.id).map(pickId) : []}
+        selectedPicks={picking === 'give' ? givePicks : getPicks}
+        onPicks={(ids) => (picking === 'give' ? setGivePicks(ids) : setGetPicks(ids))}
         onClose={() => setPicking(null)}
       />
     </>
@@ -165,19 +185,43 @@ function TradeBuilder({ partner, initial, onBack }: { partner: Team; initial: { 
 }
 
 function PickPlayers({
-  open, title, players, selected, userTeamId, onChange, onClose,
-}: { open: boolean; title: string; players: Player[]; selected: number[]; userTeamId: number; onChange: (ids: number[]) => void; onClose: () => void }) {
-  const [filter, setFilter] = useState<'MLB' | 'AAA'>('MLB');
-  const list = players.filter((p) => p.level === filter).sort((a, b) => Number(isPitcher(a)) - Number(isPitcher(b)) || byPosition(a, b));
+  open, title, players, selected, userTeamId, onChange, onClose, picks, selectedPicks, onPicks,
+}: {
+  open: boolean; title: string; players: Player[]; selected: number[]; userTeamId: number; onChange: (ids: number[]) => void; onClose: () => void;
+  picks: string[]; selectedPicks: string[]; onPicks: (ids: string[]) => void;
+}) {
+  const save = useSave();
+  const [filter, setFilter] = useState<'MLB' | 'AAA' | 'Picks'>('MLB');
+  const list = filter === 'Picks' ? [] : players.filter((p) => p.level === filter).sort((a, b) => Number(isPitcher(a)) - Number(isPitcher(b)) || byPosition(a, b));
+  const togglePick = (id: string) => onPicks(selectedPicks.includes(id) ? selectedPicks.filter((x) => x !== id) : [...selectedPicks, id]);
   const toggle = (id: number) => onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
   return (
     <BottomSheet open={open} onClose={onClose} title={title}>
       <h2 className="mb-3 pr-10 text-xl font-bold">{title}</h2>
       <div className="mb-3 flex gap-2">
-        {(['MLB', 'AAA'] as const).map((l) => (
+        {(['MLB', 'AAA', 'Picks'] as const).map((l) => (
           <button key={l} onClick={() => setFilter(l)} className={`h-9 rounded-full px-4 text-sm font-medium ${filter === l ? 'bg-ink text-bg' : 'bg-surface-2 text-muted'}`}>{l}</button>
         ))}
       </div>
+      {filter === 'Picks' && (
+        picks.length === 0 ? <p className="text-sm text-muted">No picks available to trade right now.</p> : (
+          <ul className="-mx-2">
+            {picks.map((id) => {
+              const on = selectedPicks.includes(id);
+              return (
+                <li key={id}>
+                  <button onClick={() => togglePick(id)} aria-pressed={on} className={`flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left ${on ? 'bg-accent/10' : 'hover:bg-surface-2'}`}>
+                    <span className={`grid size-6 shrink-0 place-items-center rounded-md border ${on ? 'border-accent bg-accent text-accent-contrast' : 'border-line'}`}>
+                      {on && <Icon name="check" className="size-4" />}
+                    </span>
+                    <span className="flex-1 text-sm font-medium">{pickLabel(save.teams, parsePickId(id), pickOwner(save.league, id))}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )
+      )}
       <ul className="-mx-2">
         {list.map((p) => {
           const { ovr, pot } = scoutedOverall(p, userTeamId);
@@ -200,7 +244,7 @@ function PickPlayers({
           );
         })}
       </ul>
-      <button onClick={onClose} className="mt-4 h-12 w-full rounded-xl bg-accent font-semibold text-accent-contrast">Done ({selected.length})</button>
+      <button onClick={onClose} className="mt-4 h-12 w-full rounded-xl bg-accent font-semibold text-accent-contrast">Done ({selected.length + selectedPicks.length})</button>
     </BottomSheet>
   );
 }

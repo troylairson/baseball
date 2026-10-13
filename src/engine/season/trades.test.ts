@@ -94,3 +94,29 @@ describe('trade finder and offers', () => {
     expect(c.league.offers).toHaveLength(0);
   });
 });
+
+describe('draft pick trades', () => {
+  it('values picks, moves ownership, and carries it into the draft order', async () => {
+    const { picksOwnedBy, pickId } = await import('./picks');
+    const c = ctx(9);
+    // Make team 1 look like a rebuilder with a top pick.
+    for (const t of c.teams) { t.wins = 50; t.losses = 50; }
+    c.teams[1]!.wins = 30;
+    c.teams[1]!.losses = 70;
+    const theirFirst = pickId({ season: c.league.season, round: 1, originalTeamId: 1 });
+    // A young, high-ceiling player is what a rebuilder wants for a top pick.
+    const myPlayer = best(mlb(c.players, 0).filter((p) => !p.pitching));
+    myPlayer.age = 23;
+    myPlayer.battingPotential = { contact: 72, power: 72, eye: 70, speed: myPlayer.batting.speed };
+    myPlayer.contract = { salary: 900, years: 4 };
+    const ev = evaluateTrade(c, { partnerId: 1, give: [myPlayer.id], get: [], getPicks: [theirFirst] });
+    expect(ev.accepted).toBe(true);
+    const cheap = worst(mlb(c.players, 0));
+    expect(evaluateTrade(c, { partnerId: 1, give: [cheap.id], get: [], getPicks: [theirFirst] }).accepted).toBe(false);
+    {
+      expect(executeTrade(c, { partnerId: 1, give: [myPlayer.id], get: [], getPicks: [theirFirst] }).ok).toBe(true);
+      expect(picksOwnedBy(c.league, c.teams, 0).some((p) => p.originalTeamId === 1 && p.round === 1)).toBe(true);
+      expect(picksOwnedBy(c.league, c.teams, 1).some((p) => p.originalTeamId === 1 && p.round === 1)).toBe(false);
+    }
+  });
+});

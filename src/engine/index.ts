@@ -25,3 +25,4 @@ export * from './sim/injuries';
 export * from './season/staff';
 export * from './season/assistant';
 export * from './season/morale';
+export * from './season/picks';

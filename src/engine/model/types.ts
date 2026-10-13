@@ -259,6 +259,8 @@ export interface DraftPick {
   overall: number;
   round: number;
   teamId: number;
+  /** Team the pick originally belonged to, if it was traded. */
+  originalTeamId?: number;
   playerId: number | null;
 }
 
@@ -283,6 +285,8 @@ export interface League {
   news?: NewsItem[];
   nextNewsId?: number;
   owner?: OwnerState;
+  /** Owners of traded picks, keyed by pick id (season-round-originalTeam). */
+  pickOwners?: Record<string, number>;
   /** Last date morale was updated. */
   moraleDate?: string;
   /** Trade offers AI teams have made to the user. */
