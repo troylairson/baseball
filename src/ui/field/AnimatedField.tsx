@@ -22,10 +22,12 @@ export interface AnimatedFieldProps {
   onDone: () => void;
   /** Rendered beside the caption (e.g. a speed picker). */
   aside?: ReactNode;
+  /** Extra classes for the drawing, e.g. a height cap in a side-by-side layout. */
+  svgClassName?: string;
 }
 
 /** Top-down ballpark that plays back structured play events. */
-export function AnimatedField({ fieldingColor, battingColor, names, bases, batterId, queue, speed, onDone, aside }: AnimatedFieldProps) {
+export function AnimatedField({ fieldingColor, battingColor, names, bases, batterId, queue, speed, onDone, aside, svgClassName = '' }: AnimatedFieldProps) {
   const [index, setIndex] = useState(0);
   const playing = speed !== 'instant' && index < queue.length;
   const event = playing ? queue[index]! : null;
@@ -140,7 +142,7 @@ export function AnimatedField({ fieldingColor, battingColor, names, bases, batte
     <figure className="relative">
       <svg
         viewBox={`0 ${VIEW_TOP} ${FIELD_W} ${FIELD_H - VIEW_TOP}`}
-        className="block w-full select-none"
+        className={`block w-full select-none ${svgClassName}`}
         role="img"
         aria-label={label}
         onClick={skip}

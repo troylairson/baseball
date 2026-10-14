@@ -129,24 +129,11 @@ function Live({
   const btn = 'h-11 rounded-xl border border-line bg-surface px-3 text-sm font-semibold hover:bg-surface-2 disabled:opacity-40';
 
   return (
-    <div className="mx-auto max-w-xl">
-      {/* Scoreboard */}
-      <section className="rounded-2xl border border-line bg-surface p-4">
-        <div className="flex items-center justify-between gap-2">
-          <ScoreSide team={away} runs={s.awayRuns} hits={s.awayHits} batting={s.half === 'top'} />
-          <div className="text-center">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{s.half === 'top' ? '▲' : '▼'} {ordinal(s.inning)}</p>
-            <div className="mt-1 flex justify-center gap-1" aria-label={`${s.outs} outs`}>
-              {[0, 1, 2].map((i) => <span key={i} className={`size-2.5 rounded-full ${i < s.outs ? 'bg-ink' : 'bg-line'}`} />)}
-            </div>
-          </div>
-          <ScoreSide team={home} runs={s.homeRuns} hits={s.homeHits} batting={s.half === 'bottom'} right />
-        </div>
-        <Linescore away={away} home={home} a={s.awayInnings} h={s.homeInnings} />
-      </section>
-
-      {/* Field + matchup */}
-      <section className="mt-3 overflow-hidden rounded-2xl border border-line bg-surface">
+    // Narrow screens stack everything; with room for two columns the field sits on the left and the rest on the right.
+    <div className="@container">
+    <div className="mx-auto flex max-w-xl flex-col gap-3 @lg:grid @lg:max-w-6xl @lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] @4xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] @lg:items-start">
+      {/* Field */}
+      <section className="overflow-hidden rounded-2xl border border-line bg-surface @lg:sticky @lg:top-[4.5rem]">
         <AnimatedField
           fieldingColor={fieldingTeam.primaryColor}
           battingColor={battingTeam.primaryColor}
@@ -156,6 +143,7 @@ function Live({
           queue={queue}
           speed={speed}
           onDone={onPlayed}
+          svgClassName="bg-[#0d1a14] @lg:max-h-[calc(100dvh-9.5rem)]"
           aside={
             <select
               aria-label="Animation speed"
@@ -170,53 +158,71 @@ function Live({
           }
         />
       </section>
-      <section className="mt-3 rounded-2xl border border-line bg-surface p-4">
-        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-          <Matchup label="At bat" p={batter} userTeamId={team.id}
-            detail={`${s.batterLine.h}-${s.batterLine.ab} today${s.batterLine.hr ? `, ${s.batterLine.hr} HR` : ''}${s.batterLine.bb ? `, ${s.batterLine.bb} BB` : ''}`} />
-          <Matchup label="Pitching" p={pitcher} userTeamId={team.id}
-            detail={`${ipString(s.pitcherLine.outs)} IP, ${s.pitcherLine.so} K · ${s.pitcherPitches} pitches`} />
-        </div>
-      </section>
 
-      {/* Recent plays */}
-      <section className="mt-3 rounded-2xl border border-line bg-surface p-4">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Last plays</h2>
-        {plays.length === 0 ? <p className="text-sm text-muted">Play ball!</p> : (
-          <ol className="space-y-1 text-sm">
-            {plays.map((l, i) => <li key={i} className={i === 0 ? 'font-medium' : 'text-muted'}>{l.trim()}</li>)}
-          </ol>
-        )}
-      </section>
+      {/* Upright phones: the right column's cards join the stack, scoreboard first. */}
+      <div className="contents @lg:flex @lg:min-w-0 @lg:flex-col @lg:gap-3">
+        <section className="order-first rounded-2xl border border-line bg-surface p-3 @lg:order-none @lg:p-4">
+          <div className="flex items-center justify-between gap-2">
+            <ScoreSide team={away} runs={s.awayRuns} hits={s.awayHits} batting={s.half === 'top'} />
+            <div className="text-center">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">{s.half === 'top' ? '▲' : '▼'} {ordinal(s.inning)}</p>
+              <div className="mt-1 flex justify-center gap-1" aria-label={`${s.outs} outs`}>
+                {[0, 1, 2].map((i) => <span key={i} className={`size-2.5 rounded-full ${i < s.outs ? 'bg-ink' : 'bg-line'}`} />)}
+              </div>
+            </div>
+            <ScoreSide team={home} runs={s.homeRuns} hits={s.homeHits} batting={s.half === 'bottom'} right />
+          </div>
+          <Linescore away={away} home={home} a={s.awayInnings} h={s.homeInnings} />
+        </section>
 
-      {/* Manager controls */}
-      <section className="pb-safe sticky bottom-20 z-20 mt-3 rounded-2xl border border-line bg-surface p-3 shadow-lg md:bottom-4">
-        <div className="grid grid-cols-3 gap-2 [&>button]:h-9 [&>button]:text-xs">
-          {s.userBatting ? (
-            <>
-              <button className={btn} disabled={busy || !canSteal} onClick={() => command({ type: 'steal' })}>Steal</button>
-              <button className={btn} disabled={busy || !canBunt} onClick={() => command({ type: 'bunt' })}>Bunt</button>
-              <button className={btn} disabled={busy || s.bench.length === 0} onClick={() => setSheet('pinch')}>Pinch hit</button>
-            </>
-          ) : (
-            <>
-              <button className={btn} disabled={busy} onClick={() => command({ type: 'ibb' })}>Walk him</button>
-              <button className={`${btn} col-span-2`} disabled={busy || s.bullpen.length === 0} onClick={() => setSheet('pitcher')}>Pitching change</button>
-            </>
+        {/* Manager controls: pinned above the tab bar on upright phones, in the column otherwise. */}
+        <section className="pb-safe @container sticky bottom-20 z-20 order-last rounded-2xl border border-line bg-surface p-3 shadow-lg @lg:static @lg:order-none @lg:shadow-none">
+          <div className="grid grid-cols-3 gap-2 [&>button]:h-9 [&>button]:text-xs">
+            {s.userBatting ? (
+              <>
+                <button className={btn} disabled={busy || !canSteal} onClick={() => command({ type: 'steal' })}>Steal</button>
+                <button className={btn} disabled={busy || !canBunt} onClick={() => command({ type: 'bunt' })}>Bunt</button>
+                <button className={btn} disabled={busy || s.bench.length === 0} onClick={() => setSheet('pinch')}>Pinch hit</button>
+              </>
+            ) : (
+              <>
+                <button className={btn} disabled={busy} onClick={() => command({ type: 'ibb' })}>Walk him</button>
+                <button className={`${btn} col-span-2`} disabled={busy || s.bullpen.length === 0} onClick={() => setSheet('pitcher')}>Pitching change</button>
+              </>
+            )}
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2 @xs:grid-cols-[1fr_auto_auto]">
+            <button
+              onClick={() => command({ type: s.userBatting ? 'swing' : 'auto' })}
+              disabled={busy}
+              className="col-span-2 @xs:col-span-1 flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl bg-accent font-semibold text-accent-contrast disabled:opacity-60"
+            >
+              <Icon name="play" className="size-4 shrink-0" /> <span className="truncate">{s.userBatting ? 'Swing away' : 'Pitch to him'}</span>
+            </button>
+            <button className={`${btn} text-xs`} disabled={busy} onClick={simInning} aria-label="Sim half-inning">Sim ½ inn</button>
+            <button className={`${btn} text-xs`} disabled={busy} onClick={finish} aria-label="Sim to end">Sim game</button>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-3 @lg:p-4">
+          <div className="grid min-w-0 grid-cols-2 gap-3 @lg:grid-cols-1 @4xl:grid-cols-2">
+            <Matchup label="At bat" p={batter} userTeamId={team.id}
+              detail={`${s.batterLine.h}-${s.batterLine.ab} today${s.batterLine.hr ? `, ${s.batterLine.hr} HR` : ''}${s.batterLine.bb ? `, ${s.batterLine.bb} BB` : ''}`} />
+            <Matchup label="Pitching" p={pitcher} userTeamId={team.id}
+              detail={`${ipString(s.pitcherLine.outs)} IP, ${s.pitcherLine.so} K · ${s.pitcherPitches} pitches`} />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-3 @lg:p-4">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Last plays</h2>
+          {plays.length === 0 ? <p className="text-sm text-muted">Play ball!</p> : (
+            <ol className="space-y-1 text-sm">
+              {plays.map((l, i) => <li key={i} className={i === 0 ? 'font-medium' : 'text-muted'}>{l.trim()}</li>)}
+            </ol>
           )}
-        </div>
-        <div className="mt-2 grid grid-cols-[1fr_auto_auto] gap-2">
-          <button
-            onClick={() => command({ type: s.userBatting ? 'swing' : 'auto' })}
-            disabled={busy}
-            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-accent font-semibold text-accent-contrast disabled:opacity-60"
-          >
-            <Icon name="play" className="size-4" /> {s.userBatting ? 'Swing away' : 'Pitch to him'}
-          </button>
-          <button className={`${btn} text-xs`} disabled={busy} onClick={simInning} aria-label="Sim half-inning">Sim ½ inn</button>
-          <button className={`${btn} text-xs`} disabled={busy} onClick={finish} aria-label="Sim to end">Sim game</button>
-        </div>
-      </section>
+        </section>
+      </div>
+
 
       <PickSheet
         open={sheet !== null}
@@ -231,6 +237,7 @@ function Live({
         }}
       />
     </div>
+    </div>
   );
 }
 
@@ -240,7 +247,7 @@ function ScoreSide({ team, runs, hits, batting, right }: { team: Team; runs: num
       <TeamBadge team={team} />
       <div>
         <p className="text-3xl font-bold tabular-nums leading-none">{runs}</p>
-        <p className={`text-[11px] ${batting ? 'font-semibold text-accent' : 'text-muted'}`}>{team.abbr} · {hits} H</p>
+        <p className={`whitespace-nowrap text-[11px] ${batting ? 'font-semibold text-accent' : 'text-muted'}`}>{team.abbr} · {hits} H</p>
       </div>
     </div>
   );
@@ -285,7 +292,7 @@ function Matchup({ label, p, detail, userTeamId }: { label: string; p: Player; d
         <p className="text-[11px] uppercase tracking-wide text-muted">{label}</p>
         <p className="truncate font-semibold">{fullName(p)}</p>
         <p className="truncate text-xs text-muted">{detail}</p>
-        <p className="text-xs font-medium tabular-nums">{seasonLine(p, stats.get(p.id))}</p>
+        <p className="truncate text-xs font-medium tabular-nums">{seasonLine(p, stats.get(p.id))}</p>
       </div>
       <RatingBadge value={ovr} size="sm" />
     </div>
