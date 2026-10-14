@@ -332,6 +332,9 @@ Top-down animated ballpark in the live game view, built from the spec in `docs/A
 ### Economy and trades (done)
 Contracts priced by projected WAR with service-time contracts; a four-round free agent market with player choice; surplus-value trade model with AI scouting views and positional need; AI-to-AI trades. See README.
 
+### Stats (done)
+More collected stats (holds, blown saves, quality starts, complete games, shutouts, sacrifice hits, intentional walks), separate postseason lines, per-club splits for traded players, and a sortable, filterable stats browser over current and past seasons. Not yet: splits by handedness/home-road in the browser, game-by-game logs for every player, CG/SHO and IBB are rarely nonzero (pitch limits; the AI never orders intentional walks).
+
 ### Other backlog items
 - 40-man roster, options and waivers; an AA level
 - International amateur signings; draft bonus pools

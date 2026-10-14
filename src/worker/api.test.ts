@@ -56,6 +56,10 @@ describe('engine api', () => {
     r = await api.advance();
     expect(r.ok && r.save.league.phase).toBe('preseason');
     expect(r.ok && r.save.league.season).toBe(2028);
+    // Last season's stats stay browsable, postseason lines included.
+    const last = await api.getSeasonStats(2027);
+    expect(last.reduce((s, x) => s + x.bat.pa, 0)).toBeGreaterThan(0);
+    expect(last.some((x) => (x.post?.bat.pa ?? 0) > 0)).toBe(true);
     const reloaded = await createEngineApi(new GameDB('api-test')).loadSave(id);
     expect(reloaded?.league.season).toBe(2028);
     expect(reloaded?.schedule.every((g) => !g.played)).toBe(true);

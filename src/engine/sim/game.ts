@@ -114,6 +114,10 @@ interface Appearance {
   role: 'SP' | 'CL' | 'SU' | 'MR';
   /** Outs in the current inning of this appearance's start; used for one-inning relievers. */
   outsAtEntry: number;
+  /** Fielding team's lead when he left (for holds). */
+  leadAtExit?: number;
+  /** Entered protecting a save-sized lead and lost it. */
+  blown?: boolean;
 }
 
 interface Side {
@@ -287,6 +291,8 @@ export function* liveGame(
 
   const enter = (side: Side, playerId: number, role: Appearance['role'], lead: number, outs: number) => {
     const line = { ...emptyPitching(), g: 1, gs: role === 'SP' ? 1 : 0 };
+    const previous = side.pitchers[side.pitchers.length - 1];
+    if (previous) previous.leadAtExit = lead;
     side.pitchers.push({ playerId, line, leadAtEntry: lead, role, outsAtEntry: outs });
     // Without a DH the new pitcher takes over the pitcher's lineup slot.
     const slot = side.order.findIndex((b) => b.position === 'P');
@@ -447,6 +453,9 @@ export function* liveGame(
         if (batterId !== null) bat.batters.get(batterId)!.line.rbi++;
         play?.scored.push(runner.id);
         const charged = field.pitchers.find((a) => a.playerId === runner.pitcherId) ?? current(field);
+        // A reliever who came in protecting a 1–3 run lead and lets it slip has blown the save.
+        const pitching = current(field);
+        if (field.pitchers.length > 1 && pitching.role !== 'SP' && pitching.leadAtEntry >= 1 && pitching.leadAtEntry <= 3 && field.runs - bat.runs <= 0) pitching.blown = true;
         charged.line.r++;
         if (runner.earned && earned) charged.line.er++;
         if (leadBefore === 0) {
@@ -538,7 +547,9 @@ export function* liveGame(
         if (tactic === 'ibb') {
           slot.line.pa++;
           slot.line.bb++;
+          slot.line.ibb++;
           app.line.bb++;
+          app.line.ibb++;
           app.line.bf++;
           app.line.pitches += 4;
           say(`${name(bat, batter.id)} is intentionally walked.`);
@@ -582,6 +593,7 @@ export function* liveGame(
             if (roll < 0.75) {
               outs++;
               app.line.outs++;
+              b.sh++;
               advanceAll();
               say(`${who} lays down a sacrifice bunt.`);
               markOut(batter.id, 1);
@@ -836,6 +848,24 @@ export function* liveGame(
     if (app.playerId === savePitcher) app.line.sv = 1;
   }
   for (const app of loser.pitchers) if (app.playerId === losingPitcher) app.line.l = 1;
+
+  // Quality starts, complete games, shutouts, holds and blown saves.
+  for (const side of [away, home]) {
+    const other = side === away ? home : away;
+    const starter = side.pitchers[0]!;
+    if (starter.line.outs >= 18 && starter.line.er <= 3) starter.line.qs = 1;
+    if (side.pitchers.length === 1) {
+      starter.line.cg = 1;
+      if (other.runs === 0) starter.line.sho = 1;
+    }
+    const last = side.pitchers[side.pitchers.length - 1]!;
+    for (const app of side.pitchers.slice(1)) {
+      if (app.blown) app.line.bs = 1;
+      const exitLead = app === last ? side.runs - other.runs : app.leadAtExit ?? 0;
+      const saveSpot = app.leadAtEntry >= 1 && app.leadAtEntry <= 3;
+      if (saveSpot && !app.blown && app !== last && app.line.outs >= 1 && exitLead > 0 && app.playerId !== winningPitcher) app.line.hld = 1;
+    }
+  }
 
   const box = (side: Side): TeamBox => {
     // Batters who left the lineup (pitchers replaced in the P slot) are kept.

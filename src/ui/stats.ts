@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import {
-  avg, battingWar, era, ipString, isPitcher, leagueRates, obp, ops, pitchingWar, rate3, slg, whip,
+  avg, battingWar, era, eraPlus, fip, ipString, isPitcher, leagueRates, obp, ops, per9, pitchingWar, rate3, slg, whip,
   type LeagueRates, type Player, type PlayerSeasonStats,
 } from '../engine';
 import { useSave } from '../state/game';
@@ -47,6 +47,8 @@ export interface Leader {
   /** Needs a qualifying number of PA / IP. */
   rate?: boolean;
   pitching?: boolean;
+  /** The stats-table column this leaderboard expands into (defaults to `key`). */
+  column?: string;
 }
 
 const war = (s: PlayerSeasonStats, c: LeaderCtx) => (c.player ? warFor(c.player, s, c.lg) : 0);
@@ -58,15 +60,27 @@ export const BATTING_LEADERS: Leader[] = [
   { key: 'rbi', label: 'RBI', value: (s) => s.bat.rbi, format: (s) => String(s.bat.rbi) },
   { key: 'ops', label: 'OPS', value: (s) => ops(s.bat), format: (s) => rate3(ops(s.bat)), rate: true },
   { key: 'sb', label: 'Stolen Bases', value: (s) => s.bat.sb, format: (s) => String(s.bat.sb) },
+  { key: 'h', label: 'Hits', value: (s) => s.bat.h, format: (s) => String(s.bat.h) },
+  { key: 'r', label: 'Runs', value: (s) => s.bat.r, format: (s) => String(s.bat.r) },
+  { key: 'obp', label: 'On-Base Percentage', value: (s) => obp(s.bat), format: (s) => rate3(obp(s.bat)), rate: true },
+  { key: 'slg', label: 'Slugging', value: (s) => slg(s.bat), format: (s) => rate3(slg(s.bat)), rate: true },
+  { key: 'd', label: 'Doubles', value: (s) => s.bat.d, format: (s) => String(s.bat.d) },
+  { key: 'bb', label: 'Walks', value: (s) => s.bat.bb, format: (s) => String(s.bat.bb) },
 ];
 
 export const PITCHING_LEADERS: Leader[] = [
-  { key: 'pwar', label: 'WAR (pitchers)', value: war, format: (s, c) => war(s, c).toFixed(1), pitching: true },
+  { key: 'pwar', column: 'war', label: 'WAR (pitchers)', value: war, format: (s, c) => war(s, c).toFixed(1), pitching: true },
   { key: 'era', label: 'ERA', value: (s) => era(s.pit), format: (s) => era(s.pit).toFixed(2), ascending: true, rate: true, pitching: true },
   { key: 'so', label: 'Strikeouts', value: (s) => s.pit.so, format: (s) => String(s.pit.so), pitching: true },
   { key: 'w', label: 'Wins', value: (s) => s.pit.w, format: (s) => String(s.pit.w), pitching: true },
   { key: 'sv', label: 'Saves', value: (s) => s.pit.sv, format: (s) => String(s.pit.sv), pitching: true },
   { key: 'whip', label: 'WHIP', value: (s) => whip(s.pit), format: (s) => whip(s.pit).toFixed(2), ascending: true, rate: true, pitching: true },
+  { key: 'ip', label: 'Innings Pitched', value: (s) => s.pit.outs, format: (s) => ipString(s.pit.outs), pitching: true },
+  { key: 'qs', label: 'Quality Starts', value: (s) => s.pit.qs ?? 0, format: (s) => String(s.pit.qs ?? 0), pitching: true },
+  { key: 'hld', label: 'Holds', value: (s) => s.pit.hld ?? 0, format: (s) => String(s.pit.hld ?? 0), pitching: true },
+  { key: 'k9', label: 'Strikeouts per 9', value: (s) => per9(s.pit.so, s.pit), format: (s) => per9(s.pit.so, s.pit).toFixed(1), rate: true, pitching: true },
+  { key: 'fip', label: 'FIP', value: (s, c) => fip(s.pit, c.lg), format: (s, c) => fip(s.pit, c.lg).toFixed(2), ascending: true, rate: true, pitching: true },
+  { key: 'eraplus', label: 'ERA+', value: (s, c) => eraPlus(s.pit, c.lg), format: (s, c) => String(Math.round(eraPlus(s.pit, c.lg))), rate: true, pitching: true },
 ];
 
 /** Top N for a leaderboard, applying MLB-style qualifiers (3.1 PA / 1 IP per team game). */

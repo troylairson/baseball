@@ -5,6 +5,7 @@ import { Bracket } from '../components/Bracket';
 import { RecordBook } from '../components/RecordBook';
 import { LeaderBoard } from '../components/Leaders';
 import { PlayoffPicture } from '../components/PlayoffPicture';
+import { StatsBrowser, type StatSide } from '../components/StatsBrowser';
 import { BATTING_LEADERS, PITCHING_LEADERS } from '../stats';
 import { RatingBadge } from '../components/Rating';
 import { Segmented } from '../components/Segmented';
@@ -13,7 +14,7 @@ import { TeamBadge } from '../components/TeamBadge';
 import { money } from '../format';
 import { payroll, teamOverall } from '../teams';
 
-type View = 'standings' | 'leaders' | 'playoffs' | 'history' | 'power';
+type View = 'standings' | 'leaders' | 'stats' | 'playoffs' | 'history' | 'power';
 
 export function League() {
   const { league, teams, players, meta, stats } = useSave();
@@ -22,10 +23,12 @@ export function League() {
   const VIEWS = [
     { value: 'standings', label: 'Standings' },
     { value: 'leaders', label: 'Leaders' },
+    { value: 'stats', label: 'Stats' },
     ...(league.playoffs ? [{ value: 'playoffs', label: 'Playoffs' }] : [{ value: 'power', label: 'Power' }]),
     { value: 'history', label: 'History' },
   ] as { value: View; label: string }[];
-  const [side, setSide] = useState<'bat' | 'pit'>('bat');
+  const [side, setSide] = useState<StatSide>('bat');
+  const [sort, setSort] = useState('war');
   const [standingsView, setStandingsView] = useState<'divisions' | 'race'>('divisions');
   const playerMap = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const teamMap = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
@@ -46,6 +49,8 @@ export function League() {
         <Bracket playoffs={league.playoffs} teams={teams} userTeamId={meta.userTeamId} />
       ) : view === 'history' ? (
         <RecordBook league={league} teams={teams} players={players} userTeamId={meta.userTeamId} />
+      ) : view === 'stats' ? (
+        <StatsBrowser side={side} onSide={setSide} sort={sort} onSort={setSort} />
       ) : view === 'leaders' ? (
         <>
           <div className="mb-4 flex gap-2">
@@ -61,7 +66,10 @@ export function League() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {(side === 'bat' ? BATTING_LEADERS : PITCHING_LEADERS).map((l) => (
-              <LeaderBoard key={l.key} leader={l} stats={stats} players={playerMap} teams={teamMap} teamGames={teamGames} />
+              <LeaderBoard
+                key={l.key} leader={l} stats={stats} players={playerMap} teams={teamMap} teamGames={teamGames}
+                onSeeAll={() => { setSort(l.column ?? l.key); setView('stats'); window.scrollTo(0, 0); }}
+              />
             ))}
           </div>
         </>

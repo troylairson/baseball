@@ -124,6 +124,12 @@ export async function persistProgress(db: GameDB, save: LoadedSave, changes: Pro
   });
 }
 
+/** Every player's stats for one season. */
+export async function loadSeasonStats(db: GameDB, saveId: string, season: number): Promise<PlayerSeasonStats[]> {
+  const rows = await db.stats.where('[saveId+season]').equals([saveId, season]).toArray();
+  return rows.map(strip);
+}
+
 /** All stored stats for one player across seasons. */
 export async function loadCareerStats(db: GameDB, saveId: string, playerId: number): Promise<PlayerSeasonStats[]> {
   const rows = await db.stats.where('saveId').equals(saveId).filter((s) => s.playerId === playerId).toArray();

@@ -6,7 +6,7 @@ import {
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
 import {
-  createSave, deleteSave, exportCareer, importCareer, listSaves, loadBoxScore, loadCareerStats, loadSave, persistProgress, type LoadedSave,
+  createSave, deleteSave, exportCareer, importCareer, listSaves, loadBoxScore, loadCareerStats, loadSave, loadSeasonStats, persistProgress, type LoadedSave,
 } from '../db/saves';
 
 export interface TeamPreview {
@@ -198,6 +198,13 @@ export function createEngineApi(db = new GameDB()) {
     async getBoxScore(gameId: number): Promise<BoxScore | null> {
       if (!session) return null;
       return loadBoxScore(db, session.save.meta.id, gameId);
+    },
+
+    /** Every player's stats for a season (the current one from memory, past ones from storage). */
+    async getSeasonStats(season: number): Promise<PlayerSeasonStats[]> {
+      if (!session) return [];
+      if (season === session.state.league.season) return [...session.state.stats.values()];
+      return loadSeasonStats(db, session.save.meta.id, season);
     },
 
     async getCareerStats(playerId: number): Promise<PlayerSeasonStats[]> {

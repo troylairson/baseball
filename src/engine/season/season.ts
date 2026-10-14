@@ -1,4 +1,4 @@
-import { addLine, emptyBatting, emptyPitching, type PlayerSeasonStats } from '../model/stats';
+import { addLine, emptyBatting, emptyPitching, linesByTeam, type PlayerSeasonStats } from '../model/stats';
 import type { League, Player, ScheduledGame, Team } from '../model/types';
 import { Rng } from '../rng';
 import { simGame, type GameResult, type TeamGameInput } from '../sim/game';
@@ -132,6 +132,13 @@ function statsFor(state: SeasonState, player: Player): PlayerSeasonStats {
     s = { playerId: player.id, season: state.league.season, teamId: player.teamId ?? -1, bat: emptyBatting(), pit: emptyPitching() };
     state.stats.set(player.id, s);
   }
+  // Changed clubs since his last game: file what he did so far under the old club.
+  if (player.teamId !== null && s.teamId !== player.teamId) {
+    const current = linesByTeam(s).at(-1)!;
+    // Copies: the season totals keep growing, the old club's share doesn't.
+    if (current.bat.pa || current.pit.bf) s.prior = [...(s.prior ?? []), { teamId: s.teamId, bat: { ...current.bat }, pit: { ...current.pit } }];
+    s.teamId = player.teamId;
+  }
   return s;
 }
 
@@ -204,14 +211,18 @@ function playGame(state: SeasonState, game: ScheduledGame, teams: Map<number, Te
   return { game, result };
 }
 
-function applyWorkload(state: SeasonState, result: GameResult, countStats: boolean, players: Map<number, Player>): void {
+/** Credit a game's lines to players (regular season or postseason) and add pitching workload. */
+function applyWorkload(state: SeasonState, result: GameResult, mode: 'regular' | 'post', players: Map<number, Player>): void {
+  const lines = (player: Player) => {
+    const s = statsFor(state, player);
+    if (mode === 'regular') return s;
+    return (s.post ??= { bat: emptyBatting(), pit: emptyPitching() });
+  };
   for (const box of [result.home, result.away]) {
-    if (countStats) {
-      for (const b of box.batters) addLine(statsFor(state, players.get(b.playerId)!).bat, b.line);
-    }
+    for (const b of box.batters) addLine(lines(players.get(b.playerId)!).bat, b.line);
     for (const p of box.pitchers) {
       const player = players.get(p.playerId)!;
-      if (countStats) addLine(statsFor(state, player).pit, p.line);
+      addLine(lines(player).pit, p.line);
       player.fatigue += p.line.pitches + (p.line.gs ? 0 : 10);
     }
   }
@@ -249,7 +260,7 @@ function simPlayoffDay(state: SeasonState, teams: Map<number, Team>, preplayed?:
       state.schedule.push(game);
     }
     const pg = playGame(state, game, teams, preplayed);
-    applyWorkload(state, pg.result, false, players);
+    applyWorkload(state, pg.result, 'post', players);
     applyInjuries(state, game, pg.result, players);
     recordHomeGate(teams.get(game.homeId)!, league.season, true);
     const winner = game.homeScore! > game.awayScore! ? game.homeId : game.awayId;
@@ -322,7 +333,7 @@ export function simDay(state: SeasonState, preplayed?: Map<number, GameResult>):
     home.runsAllowed += result.away.runs;
     away.runsScored += result.away.runs;
     away.runsAllowed += result.home.runs;
-    applyWorkload(state, result, true, players);
+    applyWorkload(state, result, 'regular', players);
     applyInjuries(state, game, result, players);
     recordHomeGate(home, league.season, false);
     recordUserGame(league, state.userTeamId, game, result, players);

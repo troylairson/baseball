@@ -1,5 +1,6 @@
 import {
-  avg, era, eraPlus, fip, ipString, isPitcher, obp, ops, opsPlus, per9, rate3, slg, whip, woba, type Player, type PlayerSeasonStats,
+  avg, era, eraPlus, fip, ipString, isPitcher, linesByTeam, obp, ops, opsPlus, rate3, slg, whip, woba,
+  type BattingLine, type PitchingLine, type Player, type PlayerSeasonStats,
 } from '../../engine';
 import { useLeagueRates, warFor } from '../stats';
 import { useEffect, useState } from 'react';
@@ -119,9 +120,13 @@ function SeasonStats({ player, stats, season }: { player: Player; stats: PlayerS
     ? stats.pit.g === 0
       ? []
       : [
-          ['W-L', `${stats.pit.w}-${stats.pit.l}`], ['ERA', era(stats.pit).toFixed(2)], ['G', stats.pit.g], ['SV', stats.pit.sv],
+          ['W-L', `${stats.pit.w}-${stats.pit.l}`], ['ERA', era(stats.pit).toFixed(2)], ['G', stats.pit.g],
+          // Starters are judged by quality starts; relievers by saves and holds.
+          ...(stats.pit.gs * 2 >= stats.pit.g
+            ? [['GS', stats.pit.gs], ['QS', stats.pit.qs ?? 0]] as [string, number][]
+            : [['SV', stats.pit.sv], ['HLD', stats.pit.hld ?? 0]] as [string, number][]),
           ['IP', ipString(stats.pit.outs)], ['SO', stats.pit.so], ['BB', stats.pit.bb], ['WHIP', whip(stats.pit).toFixed(2)],
-          ['ERA+', eraPlus(stats.pit, lg)], ['FIP', fip(stats.pit, lg).toFixed(2)], ['K/9', per9(stats.pit.so, stats.pit).toFixed(1)], ['WAR', war],
+          ['ERA+', eraPlus(stats.pit, lg)], ['FIP', fip(stats.pit, lg).toFixed(2)], ['WAR', war],
         ]
     : stats.bat.pa === 0
       ? []
@@ -141,7 +146,30 @@ function SeasonStats({ player, stats, season }: { player: Player; stats: PlayerS
           </div>
         ))}
       </dl>
+      <SeasonNotes player={player} stats={stats} />
     </Section>
+  );
+}
+
+/** Per-club splits for a traded player, and the postseason line. */
+function SeasonNotes({ player, stats }: { player: Player; stats: PlayerSeasonStats }) {
+  const teams = useGame((s) => s.save!.teams);
+  const pitcher = isPitcher(player);
+  const brief = (bat: BattingLine, pit: PitchingLine) => pitcher
+    ? `${pit.w}-${pit.l}, ${era(pit).toFixed(2)} ERA, ${ipString(pit.outs)} IP, ${pit.so} K${pit.sv ? `, ${pit.sv} SV` : ''}`
+    : `${rate3(avg(bat))}/${rate3(obp(bat))}/${rate3(slg(bat))}, ${bat.hr} HR, ${bat.rbi} RBI in ${bat.pa} PA`;
+  const used = (bat: BattingLine, pit: PitchingLine) => (pitcher ? pit.bf > 0 : bat.pa > 0);
+  const splits = stats.prior?.length ? linesByTeam(stats).filter((x) => used(x.bat, x.pit)) : [];
+  const post = stats.post && used(stats.post.bat, stats.post.pit) ? stats.post : null;
+  if (splits.length < 2 && !post) return null;
+  return (
+    <ul className="mt-2 space-y-1 text-sm text-muted">
+      {splits.length > 1 && splits.map((x, i) => {
+        const t = teams.find((t) => t.id === x.teamId);
+        return <li key={i}><span className="font-medium text-ink">{t?.abbr ?? '—'}:</span> {brief(x.bat, x.pit)}</li>;
+      })}
+      {post && <li><span className="font-medium text-ink">Postseason:</span> {brief(post.bat, post.pit)}</li>}
+    </ul>
   );
 }
 
