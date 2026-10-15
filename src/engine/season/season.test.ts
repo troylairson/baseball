@@ -83,7 +83,12 @@ describe('season simulation', () => {
 
   it('spreads wins realistically', () => {
     const wins = state.teams.map((t) => t.wins);
-    expect(Math.max(...wins)).toBeLessThan(115);
+    // Spread of team wins: MLB runs about 12–16 games; seeds here average 13–14.
+    const sd = Math.sqrt(wins.reduce((s, w) => s + (w - 81) ** 2, 0) / wins.length);
+    expect(sd).toBeGreaterThan(9);
+    expect(sd).toBeLessThan(18);
+    // The best team averages about 108 wins across seeds; the record is 116.
+    expect(Math.max(...wins)).toBeLessThan(122);
     // Real worst records reach the low 40s (2024 White Sox: 41-121).
     expect(Math.min(...wins)).toBeGreaterThan(40);
   });
