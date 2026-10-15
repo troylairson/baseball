@@ -15,6 +15,19 @@ export function contractStatus(p: Player): ContractStatus {
   return exp < ARB_YEARS ? 'pre-arb' : exp < FREE_AGENCY_YEARS ? 'arbitration' : 'free-agent';
 }
 
+/**
+ * Seasons before he can leave as a free agent, counting this one: his
+ * contract, or team control (pre-arbitration and arbitration years) if longer.
+ */
+export function yearsOfControl(p: Player): number {
+  const years = p.contract?.years ?? 0;
+  if (contractStatus(p) === 'free-agent') return years;
+  return Math.max(years, FREE_AGENCY_YEARS - (p.experience ?? 0));
+}
+
+/** In the last year before free agency. */
+export const headedToFreeAgency = (p: Player) => (p.contract?.years ?? 0) > 0 && yearsOfControl(p) <= 1;
+
 /** One-year arbitration award: a growing share of open-market value. */
 export function arbitrationAward(p: Player): Contract {
   const share = [0.45, 0.6, 0.78][Math.min(2, (p.experience ?? ARB_YEARS) - ARB_YEARS)]!;
@@ -71,18 +84,52 @@ export function contractDemand(p: Player): Contract {
   return { salary, years: contractYears(war, p.age) };
 }
 
+/** What a player of this value and age would have signed for (in $K). */
+function priceAt(p: Player, war: number, age: number): number {
+  const greed = 1 + (p.personality.greed - 50) / 150;
+  const ageMul = age <= 30 ? 1 : Math.max(0.45, 1 - (age - 30) * 0.08);
+  return marketSalary(war, roleOf(p)) * greed * ageMul;
+}
+
 /**
  * A plausible existing contract for a player in a new league, by service
- * time: pre-arbitration minimums, arbitration shares, or a market deal
- * signed some years ago with time left on it.
+ * time. Pre-arbitration and arbitration players are on one-year deals (team
+ * control), unless a young star was locked up early; veterans are partway
+ * through a market deal signed some winters ago, at what they were worth then.
  */
 export function initialContract(p: Player, rng: { next: () => number; int: (a: number, b: number) => number }): Contract {
   const status = contractStatus(p);
-  if (status === 'pre-arb') return preArbRenewal(p);
-  if (status === 'arbitration') return arbitrationAward(p);
-  const demand = contractDemand(p);
-  const salary = Math.max(MIN_SALARY, Math.round((demand.salary * (0.8 + rng.next() * 0.4)) / 10) * 10);
-  return { salary, years: rng.int(1, Math.max(1, Math.min(demand.years, 7))) };
+  const exp = p.experience ?? 0;
+  const war = expectedWar(p);
+  const round = (x: number) => Math.max(MIN_SALARY, Math.round(x / 10) * 10);
+
+  if (status !== 'free-agent') {
+    // Clubs buy out arbitration (and a few free-agent years) of their best young players.
+    const extend = p.level === 'MLB' && p.age <= 28 && war >= 2.5 && rng.next() < (war >= 4 ? 0.45 : 0.2);
+    if (extend) {
+      const control = FREE_AGENCY_YEARS - exp;
+      const signedAgo = rng.int(0, Math.min(2, exp));
+      const length = Math.min(10, control + signedAgo + rng.int(1, 4));
+      // Signed before he'd earned it: a discount for the security.
+      return { salary: round(priceAt(p, war, p.age) * (0.42 + rng.next() * 0.2)), years: Math.max(2, length - signedAgo) };
+    }
+    return status === 'pre-arb' ? preArbRenewal(p) : arbitrationAward(p);
+  }
+
+  // A free-agent deal signed `ago` winters back, when he was younger and (if past his prime) better.
+  const fa = exp - FREE_AGENCY_YEARS;
+  let ago = rng.int(0, Math.min(6, fa));
+  if (rng.next() < 0.35) ago = 0;
+  const thenAge = p.age - ago;
+  const thenWar = war + (p.age > 30 ? Math.min(ago, p.age - 30) * 0.4 : 0);
+  let length = contractYears(thenWar, thenAge) + (rng.next() < 0.3 ? 1 : 0) - (rng.next() < 0.2 ? 1 : 0);
+  if (length <= ago) {
+    // That deal would be over: he signed a new one last winter.
+    ago = 0;
+    length = contractYears(war, p.age);
+  }
+  const salary = round((ago ? priceAt(p, thenWar, thenAge) : priceAt(p, war, p.age)) * (0.85 + rng.next() * 0.3));
+  return { salary, years: Math.max(1, length - ago) };
 }
 
 /**

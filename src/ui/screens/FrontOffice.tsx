@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { contractStatus } from '../../engine';
+import { contractStatus, headedToFreeAgency, yearsOfControl } from '../../engine';
 import { useSave, useUserTeam } from '../../state/game';
 import { Card, PageHeader, SoonBadge } from '../components/Card';
 import { Icon, type IconName } from '../components/Icon';
@@ -101,7 +101,10 @@ export function FrontOffice() {
                     <td className="text-right">{scoutedOverall(p, team.id).ovr}</td>
                     <td className="text-right">{money(p.contract?.salary ?? 0)}</td>
                     <td className="text-right text-xs text-muted">{STATUS_LABEL[contractStatus(p)]}</td>
-                    <td className={`px-4 text-right ${p.contract?.years === 1 ? 'font-semibold text-danger' : ''}`}>{p.contract?.years}</td>
+                    <td className={`px-4 text-right ${headedToFreeAgency(p) ? 'font-semibold text-danger' : ''}`}>
+                      {p.contract?.years}
+                      {yearsOfControl(p) > (p.contract?.years ?? 0) && <span className="block text-[10px] font-normal text-muted">ctrl {yearsOfControl(p)}</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -1,3 +1,4 @@
+import { knownContract } from './mlbContracts';
 import { clampRating } from '../model/ratings';
 import type { BattingRatings, FieldPosition, PitchingRatings, Position } from '../model/types';
 import { FIELD_POSITIONS } from '../model/types';
@@ -364,6 +365,8 @@ export function mlbPackToRoster(pack: MlbPack): RosterFile {
       pitchingPotential: pitching ? growPitching(pitching, growth, rng) : null,
       injuryProneness: Math.min(1, Math.max(0, rng.normal(p.status === 'D60' ? 0.45 : 0.3, 0.12))),
       experience,
+      // Real guaranteed deal where we know it; otherwise estimated from service time on import.
+      contract: p.team ? knownContract(p.first, p.last, pack.season) ?? undefined : undefined,
     };
   });
 
