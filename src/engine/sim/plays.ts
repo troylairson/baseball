@@ -1,4 +1,5 @@
 import type { Rng } from '../rng';
+import type { PitchType } from '../model/pitches';
 import type { PaResult } from './pa';
 
 /**
@@ -51,6 +52,9 @@ export interface PlayEvent {
   playerId?: number;
   result?: PlayResult;
   pitches?: Pitch[];
+  /** Pitch type and speed (mph) for each pitch, when the pitcher's repertoire is known. */
+  pitchTypes?: PitchType[];
+  velos?: number[];
   ball?: BattedBall;
   /** Fielders who handled the ball, in order (6-4-3). */
   fielders?: Fielder[];

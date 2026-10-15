@@ -1,5 +1,6 @@
 import { softenDemands, topUpFreeAgents } from '../generate/freeAgents';
 import { generatePlayer } from '../generate/players';
+import { developArsenal, PITCH_WORDS } from '../model/pitches';
 import { isPitcher, overall } from '../model/ratings';
 import { avg, era, ipString, ops, rate3 } from '../model/stats';
 import type { Award, DraftPick, Player, Position, SeasonRecord, Team } from '../model/types';
@@ -198,6 +199,15 @@ function developAndRetire(state: SeasonState, rng: Rng): void {
       ? { hitting: 45, pitching: 45 }
       : { hitting: staffRating(league, p.teamId, 'hitting'), pitching: staffRating(league, p.teamId, 'pitching') };
     developPlayer(p, rng.fork(p.id), coaching);
+    const learned = developArsenal(p, rng.fork(`arsenal-${p.id}`));
+    if (learned && p.teamId === state.userTeamId && p.level === 'MLB') {
+      addNews(league, {
+        kind: 'transaction',
+        title: `${fullName(p)} adds a ${PITCH_WORDS[learned]}`,
+        body: `${fullName(p)} worked on a new pitch this winter and will take a ${PITCH_WORDS[learned]} into spring training.`,
+        playerId: p.id, teamId: p.teamId, mine: true,
+      });
+    }
   }
   for (const p of players) {
     if (p.retired || p.draftProspect) continue;

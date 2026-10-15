@@ -1,4 +1,4 @@
-import { countAfter, type Fielder, type PlayEvent } from '../../engine';
+import { countAfter, type Fielder, type PitchType, type PlayEvent } from '../../engine';
 import { basePoint, coverPoint, dist, fielderSpot, HOME, lerp, MOUND, polar, SCALE, type Pt } from './geometry';
 
 /**
@@ -24,6 +24,8 @@ export interface Track {
 
 export type Mark =
   | { t: number; kind: 'count'; balls: number; strikes: number }
+  /** A pitch is on its way: type and speed for the scoreboard. */
+  | { t: number; kind: 'pitch'; type: PitchType; velo: number }
   | { t: number; kind: 'badge'; text: string; at: Pt; tone: 'out' | 'safe' | 'k' | 'error' | 'hr' }
   | { t: number; kind: 'land'; at: Pt }
   | { t: number; kind: 'flash' }
@@ -173,6 +175,9 @@ export function buildTimeline({ event: e, speed }: DirectorInput): Timeline {
     shown.forEach((p, i) => {
       const n = skipped + i + 1;
       const release = t;
+      const type = e.pitchTypes?.[n - 1];
+      const velo = e.velos?.[n - 1];
+      if (type && velo) b.mark({ t: release, kind: 'pitch', type, velo });
       b.move('ball', { ...MOUND, z: 6, o: 1 }, release, release);
       const arrive = release + PITCH_MS;
       const last = n === pitches.length;

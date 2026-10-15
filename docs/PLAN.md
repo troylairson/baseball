@@ -335,10 +335,12 @@ Contracts priced by projected WAR with service-time contracts; a four-round free
 ### Stats (done)
 More collected stats (holds, blown saves, quality starts, complete games, shutouts, sacrifice hits, intentional walks), separate postseason lines, per-club splits for traded players, and a sortable, filterable stats browser over current and past seasons. Not yet: splits by handedness/home-road in the browser, game-by-game logs for every player, CG/SHO and IBB are rarely nonzero (pitch limits; the AI never orders intentional walks).
 
+### Pitch types (done)
+Repertoires with per-pitch grades, velocity and usage (`engine/model/pitches.ts`); effects on ground-ball rate, platoon splits, batter-pitch matchups and a times-through-the-order penalty softened by arsenal depth, all centred so league totals hold. Arsenal card on the player sheet, pitch type and speed in the live game. Not yet: pitch-level stats (whiff rates, usage by count), real MLB repertoires in the data pack.
+
 ### Other backlog items
 - 40-man roster, options and waivers; an AA level
 - International amateur signings; draft bonus pools
-- Pitch types and repertoires in the engine
 - All-Star break and game
 - Commissioner mode; online/shared leagues (needs a backend)
 

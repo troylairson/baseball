@@ -4,6 +4,7 @@ import {
   avg, era, ipString, isPitcher, ops, rate3, whip, type LiveCommand, type LiveSituation, type PlayEvent, type Player, type PlayerSeasonStats, type Team,
 } from '../../engine';
 import { AnimatedField } from '../field/AnimatedField';
+import { arsenalSummary } from '../components/Arsenal';
 import type { Speed } from '../field/director';
 import { useStatsMap } from '../stats';
 import { useGame, useSave, useUserTeam } from '../../state/game';
@@ -209,7 +210,7 @@ function Live({
             <Matchup label="At bat" p={batter} userTeamId={team.id}
               detail={`${s.batterLine.h}-${s.batterLine.ab} today${s.batterLine.hr ? `, ${s.batterLine.hr} HR` : ''}${s.batterLine.bb ? `, ${s.batterLine.bb} BB` : ''}`} />
             <Matchup label="Pitching" p={pitcher} userTeamId={team.id}
-              detail={`${ipString(s.pitcherLine.outs)} IP, ${s.pitcherLine.so} K · ${s.pitcherPitches} pitches`} />
+              detail={`${ipString(s.pitcherLine.outs)} IP, ${s.pitcherLine.so} K · ${s.pitcherPitches} pitches`} arsenal={arsenalSummary(pitcher)} />
           </div>
         </section>
 
@@ -283,7 +284,7 @@ function seasonLine(p: Player, s: PlayerSeasonStats | undefined): string {
   return `${rate3(avg(s.bat))} AVG · ${rate3(ops(s.bat))} OPS · ${s.bat.hr} HR`;
 }
 
-function Matchup({ label, p, detail, userTeamId }: { label: string; p: Player; detail: string; userTeamId: number }) {
+function Matchup({ label, p, detail, userTeamId, arsenal }: { label: string; p: Player; detail: string; userTeamId: number; arsenal?: string | null }) {
   const { ovr } = scoutedOverall(p, userTeamId);
   const stats = useStatsMap();
   return (
@@ -292,6 +293,7 @@ function Matchup({ label, p, detail, userTeamId }: { label: string; p: Player; d
         <p className="text-[11px] uppercase tracking-wide text-muted">{label}</p>
         <p className="truncate font-semibold">{fullName(p)}</p>
         <p className="truncate text-xs text-muted">{detail}</p>
+        {arsenal && <p className="truncate text-xs text-muted" title="Repertoire">{arsenal}</p>}
         <p className="truncate text-xs font-medium tabular-nums">{seasonLine(p, stats.get(p.id))}</p>
       </div>
       <RatingBadge value={ovr} size="sm" />

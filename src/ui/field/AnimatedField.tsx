@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { PlayEvent } from '../../engine';
+import { PITCH_WORDS, type PlayEvent } from '../../engine';
 import { buildTimeline, restingFrames, sample, type Mark, type Speed, type Timeline } from './director';
 import { basePoint, fencePath, FIELD_H, FIELD_W, HOME, MOUND, polar } from './geometry';
 
@@ -128,6 +128,8 @@ export function AnimatedField({ fieldingColor, battingColor, names, bases, batte
   };
 
   const count = [...marks].reverse().find((m) => m.kind === 'count');
+  const pitch = [...marks].reverse().find((m) => m.kind === 'pitch');
+  const pitchText = pitch && pitch.kind === 'pitch' ? `${pitch.velo} mph ${PITCH_WORDS[pitch.type]}` : null;
   const badges = marks.filter((m) => m.kind === 'badge');
   const land = [...marks].reverse().find((m) => m.kind === 'land');
   const flash = marks.some((m) => m.kind === 'flash');
@@ -187,6 +189,12 @@ export function AnimatedField({ fieldingColor, battingColor, names, bases, batte
           <g transform={`translate(10 ${VIEW_TOP + 8})`}>
             <rect width={62} height={22} rx={6} fill="#0b1120" opacity={0.75} />
             <text x={31} y={15} textAnchor="middle" fontSize={11} fontWeight={700} fill="#f8fafc">{count.balls}–{count.strikes}</text>
+          </g>
+        )}
+        {pitchText && (
+          <g transform={`translate(${count ? 78 : 10} ${VIEW_TOP + 8})`}>
+            <rect width={pitchText.length * 6 + 14} height={22} rx={6} fill="#0b1120" opacity={0.75} />
+            <text x={7} y={15} fontSize={11} fontWeight={600} fill="#f8fafc">{pitchText}</text>
           </g>
         )}
       </svg>

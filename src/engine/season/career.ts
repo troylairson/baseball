@@ -1,3 +1,4 @@
+import { arsenalOf } from '../model/pitches';
 import type { Player } from '../model/types';
 import { addNews } from './news';
 import { marketBudget, setOwnerTargets } from './offseason';
@@ -27,6 +28,7 @@ export function ensureCareerDefaults(state: SeasonState): void {
   }
   for (const p of state.players as Player[]) {
     p.experience ??= p.level === 'MLB' ? Math.max(0, p.age - 23) : 0;
+    arsenalOf(p);
   }
   if (!league.owner) {
     setOwnerTargets(state);

@@ -1,3 +1,4 @@
+import { PITCH_NAMES, type Arsenal } from '../model/pitches';
 import { clampRating, isPitcher } from '../model/ratings';
 import type {
   BattingRatings, Conference, Division, FieldPosition, League, LeagueSettings, PitchingRatings, Player, Position, Team,
@@ -58,6 +59,8 @@ export interface RosterPlayer {
   fielding: Player['fielding'];
   pitching?: PitchingRatings | null;
   pitchingPotential?: PitchingRatings | null;
+  /** Pitch repertoire; generated from the ratings when left out. */
+  arsenal?: Arsenal;
   personality?: Player['personality'];
   injuryProneness?: number;
   contract?: Player['contract'];
@@ -97,7 +100,7 @@ export function exportRoster(source: { league: League; teams: Team[]; players: P
         firstName: p.firstName, lastName: p.lastName, age: p.age, bats: p.bats, throws: p.throws, position: p.position,
         team: p.teamId === null ? null : key.get(p.teamId) ?? null, level: p.level,
         positionRatings: p.positionRatings, batting: p.batting, battingPotential: p.battingPotential, fielding: p.fielding,
-        pitching: p.pitching, pitchingPotential: p.pitchingPotential, personality: p.personality,
+        pitching: p.pitching, pitchingPotential: p.pitchingPotential, arsenal: p.arsenal, personality: p.personality,
         injuryProneness: p.injuryProneness, contract: p.contract, experience: p.experience,
       })),
   };
@@ -105,6 +108,18 @@ export function exportRoster(source: { league: League; teams: Team[]; players: P
 
 // ---------------------------------------------------------------------------
 // Validation
+
+/** Keep a file's arsenal only if it's well formed; otherwise one is generated from the ratings. */
+function validArsenal(a: unknown): Arsenal | undefined {
+  const x = a as Arsenal | undefined;
+  if (!x || !Array.isArray(x.pitches) || x.pitches.length === 0 || x.pitches.length > 6) return undefined;
+  if (!x.pitches.every((p) => p && p.type in PITCH_NAMES && Number.isFinite(p.q) && Number.isFinite(p.usage) && p.usage >= 0)) return undefined;
+  const total = x.pitches.reduce((s, p) => s + p.usage, 0) || 1;
+  return {
+    velo: Number.isFinite(x.velo) ? Math.max(-8, Math.min(8, x.velo)) : 0,
+    pitches: x.pitches.map((p) => ({ type: p.type, q: Math.max(-20, Math.min(20, p.q)), usage: p.usage / total })),
+  };
+}
 
 const POSITIONS = new Set<string>([...FIELD_POSITIONS, 'DH', 'SP', 'RP']);
 
@@ -220,6 +235,7 @@ export function leagueFromRoster(
       scoutSeed: rng.nextUint32(),
       fatigue: 0,
       experience: r.experience ?? (r.level === 'AAA' ? 0 : Math.max(0, Math.round(r.age) - 24)),
+      arsenal: pitching ? validArsenal(r.arsenal) : undefined,
     };
     if (!pitcher && p.position !== 'DH' && p.positionRatings[p.position as FieldPosition] === undefined) {
       p.positionRatings[p.position as FieldPosition] = p.fielding.defense;
