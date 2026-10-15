@@ -1,3 +1,4 @@
+import { openingBudget } from '../season/finance';
 import { PITCH_NAMES, type Arsenal } from '../model/pitches';
 import { clampRating, isPitcher } from '../model/ratings';
 import type {
@@ -277,7 +278,7 @@ export function leagueFromRoster(
   softenDemands(players);
   for (const team of teams) {
     const payroll = players.filter((p) => p.teamId === team.id).reduce((s, p) => s + (p.contract?.salary ?? 0), 0);
-    team.budget = Math.max(70000 + team.market * 22000, Math.round((payroll * 1.08 + 8000) / 1000) * 1000);
+    team.budget = openingBudget(payroll, team.market);
   }
 
   const season = Number.isInteger(file.season) ? file.season + 1 : START_SEASON;

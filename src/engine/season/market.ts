@@ -110,6 +110,9 @@ export function withdrawOffer(state: SeasonState, playerId: number): void {
 // ---------------------------------------------------------------------------
 // AI clubs
 
+/** Luxury-tax line as a multiple of the league's average payroll. */
+const TAX_LINE = 1.6;
+
 /** Payroll already committed for next season and the one after. */
 function commitments(state: SeasonState, teamId: number): [number, number] {
   let next = 0;
@@ -171,10 +174,11 @@ function aiBids(state: SeasonState, rng: Rng): Bid[] {
     return v;
   };
   const warOf = new Map(pool.map((p) => [p.id, expectedWar(p)]));
-  // Clubs stay under a luxury-tax line well above the league's average payroll.
+  // Clubs stay under a luxury-tax line well above the league's average payroll
+  // (MLB's sits about 1.6x the average), so big markets can spend their budgets.
   const committed = new Map(state.teams.map((t) => [t.id, commitments(state, t.id)]));
   const payrolls = state.teams.map((t) => committed.get(t.id)![0]);
-  const taxLine = (payrolls.reduce((a, b) => a + b, 0) / payrolls.length) * 1.3;
+  const taxLine = (payrolls.reduce((a, b) => a + b, 0) / payrolls.length) * TAX_LINE;
   for (const team of rng.shuffle(state.teams.filter((t) => t.id !== state.userTeamId))) {
     const budget = Math.min(nextBudget(team) * 0.97 - staffCost(state.league, team), taxLine);
     let [next, after] = committed.get(team.id)!;

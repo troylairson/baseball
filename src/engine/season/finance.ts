@@ -112,12 +112,20 @@ export function closeSeasonBooks(state: SeasonState): void {
   }
 }
 
+/** Share of revenue owners put back into payroll (the rest is staff costs and profit). */
+export const PAYROLL_SHARE = 0.95;
+
 /**
  * Next season's owner budget: half last year's budget, half what the club
- * earned (owners keep ~15% as profit). Successful, popular teams grow.
+ * earned. Successful, popular teams grow.
  */
 export function nextBudget(team: Team): number {
   const current = team.budget ?? 110000;
-  const revenue = team.lastFinances ? totalRevenue(team.lastFinances) : current / 0.85;
-  return Math.round((current * 0.5 + revenue * 0.85 * 0.5) / 1000) * 1000;
+  const revenue = team.lastFinances ? totalRevenue(team.lastFinances) : current / PAYROLL_SHARE;
+  return Math.round((current * 0.5 + revenue * PAYROLL_SHARE * 0.5) / 1000) * 1000;
+}
+
+/** Opening budget for a club in a new league: its payroll plus room to add players. */
+export function openingBudget(payroll: number, market: number): number {
+  return Math.max(70000 + market * 22000, Math.round((payroll * 1.12 + 14000) / 1000) * 1000);
 }
