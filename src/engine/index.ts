@@ -38,3 +38,4 @@ export * from './sim/plays';
 export * from './season/market';
 export * from './season/value';
 export * from './season/aiTrades';
+export * from './model/pitches';

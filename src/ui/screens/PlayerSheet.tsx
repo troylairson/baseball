@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { useGame } from '../../state/game';
 import { engine } from '../../worker/client';
 import { PlayerActions } from './PlayerActions';
+import { ArsenalCard } from '../components/Arsenal';
 import { MoraleSummary } from '../components/Morale';
 import { RecentForm } from '../components/RecentForm';
 import { PlatoonControl } from '../components/PlatoonControl';
@@ -86,6 +87,11 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
           {bar('Control', 'control', player.pitching!.control, player.pitchingPotential!.control)}
           {bar('Movement', 'movement', player.pitching!.movement, player.pitchingPotential!.movement)}
           {bar('Stamina', 'stamina', player.pitching!.stamina, player.pitchingPotential!.stamina)}
+        </Section>
+      ) : null}
+      {isPitcher(player) ? (
+        <Section title="Arsenal">
+          <ArsenalCard player={player} userTeamId={userTeamId} />
         </Section>
       ) : (
         <>

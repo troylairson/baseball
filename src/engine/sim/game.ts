@@ -6,8 +6,9 @@ import { moraleRatingBonus } from '../season/morale';
 import { chemistryRatingBonus } from '../season/chemistry';
 import type { Rng } from '../rng';
 import { defenseAt, type GamePlan, type LineupSlot } from './lineup';
+import { arsenalOf, choosePitch, mixTraits, pitchVelo, PITCH_WORDS, type MixTraits, type PitchType } from '../model/pitches';
 import { pitchesFor, resolvePa, type PaResult } from './pa';
-import { battedBallFor, pitchSequence, type Fielder, type PlayEvent, type PlayResult, type RunnerMove } from './plays';
+import { battedBallFor, countAfter, pitchSequence, type Fielder, type PlayEvent, type PlayResult, type RunnerMove } from './plays';
 import { Rng as CosmeticRng } from '../rng';
 
 export interface TeamGameInput {
@@ -118,6 +119,10 @@ interface Appearance {
   leadAtExit?: number;
   /** Entered protecting a save-sized lead and lost it. */
   blown?: boolean;
+  /** Times each batter has faced him in this appearance. */
+  faced: Map<number, number>;
+  /** His repertoire's traits (pitchers without ratings have none). */
+  mix?: MixTraits;
 }
 
 interface Side {
@@ -293,7 +298,12 @@ export function* liveGame(
     const line = { ...emptyPitching(), g: 1, gs: role === 'SP' ? 1 : 0 };
     const previous = side.pitchers[side.pitchers.length - 1];
     if (previous) previous.leadAtExit = lead;
-    side.pitchers.push({ playerId, line, leadAtEntry: lead, role, outsAtEntry: outs });
+    const p = side.players.get(playerId);
+    const arsenal = p ? arsenalOf(p) : null;
+    side.pitchers.push({
+      playerId, line, leadAtEntry: lead, role, outsAtEntry: outs, faced: new Map(),
+      mix: arsenal && p?.pitching ? mixTraits(arsenal, p.pitching) : undefined,
+    });
     // Without a DH the new pitcher takes over the pitcher's lineup slot.
     const slot = side.order.findIndex((b) => b.position === 'P');
     if (slot >= 0 && role !== 'SP') {
@@ -539,10 +549,24 @@ export function* liveGame(
 
         const pitchesBefore = app.line.pitches;
         beginPlay(bases, outs, batter.id);
+        const batSide = batter.bats === 'S' ? (pitcher.throws === 'L' ? 'R' : 'L') : batter.bats;
+        const arsenal = arsenalOf(pitcher);
+        /** The pitch type thrown (cosmetic); his best weapons come out with two strikes. */
+        const pickPitch = (twoStrikes: boolean): PitchType | undefined =>
+          arsenal ? choosePitch(arsenal, fx, twoStrikes, batSide, pitcher.throws) : undefined;
+        let finalPitch: PitchType | undefined;
         const paEvent = (result: PlayResult, opts: { direction?: number; popup?: boolean } = {}) => {
           const count = app.line.pitches - pitchesBefore;
-          const spec = battedBallFor(result, fx, { bats: batter.bats === 'S' ? (pitcher.throws === 'L' ? 'R' : 'L') : batter.bats, power: batter.batting.power, ...opts });
-          endPlay(bat, bases, outs, { kind: 'pa', batterId: batter.id, pitcherId: app.playerId, result, pitches: pitchSequence(result, count, fx), ...spec });
+          const spec = battedBallFor(result, fx, { bats: batSide, power: batter.batting.power, ...opts });
+          const pitches = pitchSequence(result, count, fx);
+          let pitchTypes: PitchType[] | undefined;
+          let velos: number[] | undefined;
+          if (arsenal && pitcher.pitching && pitches.length) {
+            pitchTypes = pitches.map((_, i) => (i === pitches.length - 1 && finalPitch) || pickPitch(countAfter(pitches, i)[1] >= 2)!);
+            velos = pitchTypes.map((t) => Math.round(pitchVelo(t, arsenal, pitcher.pitching!) + fx.normal(0, 0.8)));
+          }
+          endPlay(bat, bases, outs, { kind: 'pa', batterId: batter.id, pitcherId: app.playerId, result, pitches, pitchTypes, velos, ...spec });
+          finalPitch = undefined;
         };
         if (tactic === 'ibb') {
           slot.line.pa++;
@@ -620,8 +644,13 @@ export function* liveGame(
             continue;
           }
         }
+        const timesFaced = (app.faced.get(batter.id) ?? 0) + 1;
+        app.faced.set(batter.id, timesFaced);
         const result: PaResult = resolvePa(
-          { bat: batRatings(batter), bats: batter.bats, pitch: effective(field, app), throws: pitcher.throws, defense: field.defense - defenseShift },
+          {
+            bat: batRatings(batter), bats: batter.bats, pitch: effective(field, app), throws: pitcher.throws, defense: field.defense - defenseShift,
+            mix: app.mix, timesFaced,
+          },
           rng,
         );
         const b = slot.line;
@@ -641,7 +670,8 @@ export function* liveGame(
             pl.so++;
             pl.outs++;
             outs++;
-            say(`${who} strikes out ${rng.chance(0.25) ? 'looking' : 'swinging'}.`);
+            finalPitch = pickPitch(true);
+            say(`${who} strikes out ${rng.chance(0.25) ? 'looking' : 'swinging'}${finalPitch ? ` on a ${PITCH_WORDS[finalPitch]}` : ''}.`);
             paEvent('K');
             break;
           case 'BB':

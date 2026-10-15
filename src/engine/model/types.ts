@@ -1,3 +1,4 @@
+import type { Arsenal } from './pitches';
 export type Hand = 'L' | 'R';
 export type BatSide = Hand | 'S';
 
@@ -67,6 +68,8 @@ export interface Player {
   contract: Contract | null;
   /** Per-player seed used to produce stable scouting noise. */
   scoutSeed: number;
+  /** Pitch repertoire (pitchers only); created from the ratings when missing. */
+  arsenal?: Arsenal;
   /** Accumulated pitching workload (0 = fully rested). Recovers daily. */
   fatigue: number;
   /** Completed MLB seasons; 0 = rookie. */

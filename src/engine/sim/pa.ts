@@ -1,3 +1,4 @@
+import type { MixTraits } from '../model/pitches';
 import type { BattingRatings, BatSide, Hand, PitchingRatings } from '../model/types';
 import type { Rng } from '../rng';
 
@@ -33,6 +34,20 @@ export interface PaContext {
   throws: Hand;
   /** Fielding team defense on the 20–80 scale. */
   defense: number;
+  /** The pitcher's repertoire, if known (see model/pitches). */
+  mix?: MixTraits;
+  /** Which time this batter is facing this pitcher today (1 = first). */
+  timesFaced?: number;
+}
+
+/**
+ * Hitters do better each time they see a pitcher in a game; a deep
+ * repertoire hides the pattern longer. In rating-like points against the
+ * pitcher, roughly zero on average across all plate appearances.
+ */
+export function timesThroughPenalty(timesFaced: number, depth: number): number {
+  const base = timesFaced <= 1 ? -1.0 : timesFaced === 2 ? 1.0 : timesFaced === 3 ? 2.6 : 3.8;
+  return timesFaced >= 3 ? base + (3 - Math.min(5, depth)) * 0.9 : base;
 }
 
 export interface PaProbabilities {
@@ -58,12 +73,35 @@ export function paProbabilities(ctx: PaContext): PaProbabilities {
   const babipB = LEAGUE.babip + (bat.contact - 50) * 0.0018 + (bat.speed - 50) * 0.0006;
   const babipP = LEAGUE.babip - (pitch.movement - 50) * 0.0008 - (pitch.stuff - 50) * 0.0003;
 
+  // What the pitch mix does: platoon weapons, ground balls, and who it plays against.
+  let k = 1;
+  let hr = 1;
+  let bb = 1;
+  let babip = 0;
+  const m = ctx.mix;
+  if (m) {
+    if (sameSide) k *= 1 + 0.25 * m.breaking;
+    else {
+      k *= 1 + 0.25 * m.offspeed;
+      hr *= 1 - 0.3 * m.offspeed;
+    }
+    hr *= Math.exp(-0.28 * m.gb);
+    // Free swingers (power over contact) chase breaking balls; weak-contact hitters can't catch up to velocity.
+    k *= 1 + 0.025 * (bat.power - bat.contact) * m.breakingShare;
+    k *= 1 + 0.0015 * m.velo * (50 - bat.contact);
+    const pen = timesThroughPenalty(ctx.timesFaced ?? 1, m.depth);
+    k *= Math.exp(-0.022 * pen);
+    bb *= Math.exp(0.012 * pen);
+    hr *= Math.exp(0.03 * pen);
+    babip += 0.0022 * pen;
+  }
+
   return {
-    k: log5(kB, kP, LEAGUE.k) * platoon.k,
-    bb: log5(bbB, bbP, LEAGUE.bb) * platoon.bb,
+    k: log5(kB, kP, LEAGUE.k) * platoon.k * k,
+    bb: log5(bbB, bbP, LEAGUE.bb) * platoon.bb * bb,
     hbp: LEAGUE.hbp,
-    hr: log5(hrB, hrP, LEAGUE.hr) * platoon.hr,
-    babip: babipB + babipP - LEAGUE.babip + platoon.babip - (ctx.defense - 50) * 0.0025,
+    hr: log5(hrB, hrP, LEAGUE.hr) * platoon.hr * hr,
+    babip: babipB + babipP - LEAGUE.babip + platoon.babip - (ctx.defense - 50) * 0.0025 + babip,
   };
 }
 
@@ -85,8 +123,10 @@ export function resolvePa(ctx: PaContext, rng: Rng): PaResult {
     return '1B';
   }
   if (rng.chance(LEAGUE.error * f(ctx.defense, -0.3))) return 'E';
+  // Sinkers and splitters turn fly balls into grounders.
+  const gb = ctx.mix ? Math.max(-0.12, Math.min(0.12, ctx.mix.gb * 0.1)) : 0;
   const t = rng.next();
-  return t < 0.45 ? 'GO' : t < 0.8 ? 'FO' : 'LO';
+  return t < 0.45 + gb ? 'GO' : t < 0.8 ? 'FO' : 'LO';
 }
 
 /** Approximate pitches thrown in a plate appearance. */
