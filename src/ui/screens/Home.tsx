@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { autoPlan, overall, pickStarter, type Player } from '../../engine';
+import { autoPlan, headedToFreeAgency, overall, pickStarter, type Player } from '../../engine';
 import { useSave, useUserTeam } from '../../state/game';
 import { Card } from '../components/Card';
 import { Icon, type IconName } from '../components/Icon';
@@ -29,7 +29,7 @@ export function Home() {
   const topProspect = org
     .filter((p) => p.level === 'AAA')
     .sort((a, b) => overall(b, true) - overall(a, true))[0];
-  const expiring = org.filter((p) => p.level === 'MLB' && p.contract?.years === 1);
+  const expiring = org.filter((p) => p.level === 'MLB' && headedToFreeAgency(p));
   const division = league.divisions.find((d) => d.id === team.divisionId)!;
   const unhappy = org.filter((p) => (p.morale ?? 50) < 35).sort((a, b) => (a.morale ?? 50) - (b.morale ?? 50));
 
@@ -78,7 +78,7 @@ export function Home() {
             />
           )}
           {expiring.length > 0 && (
-            <Todo icon="pen" to="/play/office" title={`${expiring.length} contracts expire this season`} detail="Decide who to extend before free agency." />
+            <Todo icon="pen" to="/play/office" title={`${expiring.length} player${expiring.length === 1 ? '' : 's'} can leave as free agents after this season`} detail="Decide who to extend before free agency." />
           )}
           {pay > budget && (
             <Todo icon="alert" to="/play/office" title="Spending is over budget" detail={`${money(pay - budget)} over the owner's ${money(budget)} limit.`} />

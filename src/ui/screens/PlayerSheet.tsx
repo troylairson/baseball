@@ -1,5 +1,5 @@
 import {
-  avg, era, eraPlus, fip, ipString, isPitcher, linesByTeam, obp, ops, opsPlus, rate3, slg, whip, woba,
+  avg, era, eraPlus, fip, ipString, isPitcher, linesByTeam, yearsOfControl, obp, ops, opsPlus, rate3, slg, whip, woba,
   type BattingLine, type PitchingLine, type Player, type PlayerSeasonStats,
 } from '../../engine';
 import { useLeagueRates, warFor } from '../stats';
@@ -56,7 +56,12 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
         <Summary label="Potential"><RatingBadge value={pot} size="lg" /><span className="text-xs text-muted">{gradeLabel(pot)}</span></Summary>
         <Summary label="Contract">
           <span className="text-lg font-bold tabular-nums">{money(player.contract?.salary ?? 0)}</span>
-          <span className="text-xs text-muted">{player.contract?.years ?? 0} yr{player.contract?.years === 1 ? '' : 's'} left</span>
+          <span className="text-xs text-muted">
+            {yearsOfControl(player) > (player.contract?.years ?? 0)
+              // Pre-arbitration and arbitration players are renewed year to year until free agency.
+              ? `Team control thru ${save.league.season + yearsOfControl(player) - 1}`
+              : `${player.contract?.years ?? 0} yr${player.contract?.years === 1 ? '' : 's'} left`}
+          </span>
         </Summary>
       </div>
 
