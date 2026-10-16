@@ -32,6 +32,8 @@ export interface MarketState {
   interest: Record<number, number>;
   /** Best AI offer last round, by player, as the player scores it. */
   bestScore: Record<number, number>;
+  /** Each player's asking salary when the market opened (older saves may lack it). */
+  openingAsk?: Record<number, number>;
 }
 
 export type MarketResult = { ok: true } | { ok: false; reason: string };
@@ -45,7 +47,9 @@ export function patience(round: number): number {
 }
 
 export function openMarket(state: SeasonState): void {
-  state.league.market = { round: 1, offers: [], interest: {}, bestScore: {} };
+  const openingAsk: Record<number, number> = {};
+  for (const p of freeAgents(state.players)) openingAsk[p.id] = (p.demand ?? contractDemand(p)).salary;
+  state.league.market = { round: 1, offers: [], interest: {}, bestScore: {}, openingAsk };
 }
 
 /** Last season's winning percentage, or roster strength before games are played. */
@@ -272,17 +276,52 @@ export function resolveRound(state: SeasonState, final = false): RoundSummary {
     market.interest[playerId] = ai.length;
     market.bestScore[playerId] = ai[0]?.score ?? 0;
     // In the last round, anyone with an offer takes the best one that's at all reasonable.
-    const floor = final ? (p.demand ?? contractDemand(p)).salary * 0.6 : reservation(p, market.round);
+    const ask = (p.demand ?? contractDemand(p)).salary;
+    const floor = final ? Math.max(ask * 0.6, (market.openingAsk?.[p.id] ?? ask) * 0.5) : reservation(p, market.round);
     if (best.score >= floor) {
       sign(state, p, best);
       if (best.teamId === state.userTeamId) summary.signed.push(p.id);
       else if (list.some((b) => b.teamId === state.userTeamId)) summary.lost.push({ playerId: p.id, teamId: best.teamId });
     }
   }
+  if (!final) adjustAsks(state, byPlayer);
   // Offers to players who signed are gone.
   market.offers = market.offers.filter((o) => state.players.find((x) => x.id === o.playerId)?.teamId === null);
   market.round++;
   return summary;
+}
+
+/** Lowest a player's ask falls during the winter, as a share of his opening ask. */
+const ASK_FLOOR = 0.65;
+
+/**
+ * Unsigned players read the market between rounds. Nobody bid: he lowers his
+ * price (stars the most, since few clubs can fit them) and will take a
+ * shorter deal. Bids came in below his price: he moves toward the best one.
+ */
+function adjustAsks(state: SeasonState, byPlayer: Map<number, Bid[]>): void {
+  const market = state.league.market!;
+  const opening = (market.openingAsk ??= {});
+  for (const p of freeAgents(state.players)) {
+    const ask = p.demand ?? contractDemand(p);
+    opening[p.id] ??= ask.salary;
+    const war = expectedWar(p);
+    if (war < 0.3) continue;
+    const bids = (byPlayer.get(p.id) ?? []).filter((b) => b.teamId !== state.userTeamId);
+    let salary = ask.salary;
+    let years = ask.years;
+    if (bids.length === 0) {
+      salary *= war >= 3 ? 0.85 : 0.9;
+      // A one- or two-year "pillow" deal to rebuild his value.
+      if (years > 2) years = Math.max(2, Math.ceil(years / 2));
+    } else {
+      const top = Math.max(...bids.map((b) => b.salary));
+      // Price it so next round's patience accepts what the market is paying.
+      salary = Math.max(salary * 0.9, Math.min(salary, top / patience(market.round + 1)));
+    }
+    salary = Math.max(salary, opening[p.id]! * ASK_FLOOR, MIN_SALARY);
+    p.demand = { salary: Math.round(salary / 10) * 10, years };
+  }
 }
 
 /** Finish free agency: play out the remaining rounds. */

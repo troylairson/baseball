@@ -76,12 +76,22 @@ describe('free agent market', () => {
     expect(s.league.market!.offers.some((o) => o.playerId === fa.id)).toBe(false);
   });
 
+  it('lowers asks between rounds for players nobody bids on, but not below the floor', { timeout: 30000 }, () => {
+    const t = atFreeAgency(24);
+    const opening = new Map(freeAgents(t.players).map((p) => [p.id, contractDemand(p).salary] as const));
+    for (const p of freeAgents(t.players)) opening.set(p.id, (p.demand ?? contractDemand(p)).salary);
+    for (let r = 1; r < MARKET_ROUNDS; r++) resolveRound(t);
+    const left = freeAgents(t.players).filter((p) => expectedWar(p) >= 2);
+    expect(left.some((p) => p.demand!.salary < opening.get(p.id)! * 0.9)).toBe(true);
+    for (const p of left) expect(p.demand!.salary).toBeGreaterThanOrEqual(Math.floor(opening.get(p.id)! * 0.65) - 10);
+  });
+
   it('lets AI clubs sign most of the good free agents within budget', { timeout: 30000 }, () => {
     const t = atFreeAgency(22);
     const good = freeAgents(t.players).filter((p) => expectedWar(p) >= 2);
     for (let r = 1; r <= MARKET_ROUNDS; r++) resolveRound(t, r === MARKET_ROUNDS);
     const signed = good.filter((p) => p.teamId !== null);
-    // Most sign in the winter (62–77% across seeds); the rest take one-year deals in spring.
+    // Most sign in the winter (59–100% across seeds); the rest take one-year deals in spring.
     expect(signed.length / Math.max(1, good.length)).toBeGreaterThan(0.5);
     for (const p of signed) expect(p.contract!.salary).toBeGreaterThan(760 * 2);
   });
