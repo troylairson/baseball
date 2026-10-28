@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { lastSaveId, useGame } from '../state/game';
 import { AppShell } from './layout/AppShell';
 import { FreeAgents } from './screens/FreeAgents';
@@ -14,6 +14,20 @@ import { Roster } from './screens/Roster';
 import { Staff } from './screens/Staff';
 import { Trades } from './screens/Trades';
 import { Welcome } from './screens/Welcome';
+
+/**
+ * Each screen opens at the top. The browser keeps one scroll position for the
+ * whole app, so without this a new screen inherits wherever the last one was
+ * scrolled to. Keyed on the path only, so opening a player or box score sheet
+ * (a search param) leaves the page where it is.
+ */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 export function App() {
   const [booting, setBooting] = useState(true);
@@ -30,6 +44,7 @@ export function App() {
 
   return (
     <HashRouter>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={hasSave ? <Navigate to="/play/home" replace /> : <Welcome />} />
         <Route path="/new" element={<NewCareer />} />
