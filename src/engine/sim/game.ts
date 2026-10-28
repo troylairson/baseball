@@ -68,6 +68,11 @@ export interface LiveSituation {
   homeHits: number;
   battingTeamId: number;
   batterId: number;
+  /** Where the batter is playing today, and his spot in the order (1–9). */
+  batterPosition: string;
+  batterSpot: number;
+  /** Who hits next. */
+  onDeckId: number;
   pitcherId: number;
   pitcherPitches: number;
   /** Today's lines so far. */
@@ -491,6 +496,9 @@ export function* liveGame(
             awayHits: away.hits, homeHits: home.hits,
             battingTeamId: bat.input.team.id,
             batterId: bat.order[bat.batterIdx]!.playerId,
+            batterPosition: bat.order[bat.batterIdx]!.position,
+            batterSpot: bat.batterIdx + 1,
+            onDeckId: bat.order[(bat.batterIdx + 1) % bat.order.length]!.playerId,
             pitcherId: current(field).playerId,
             pitcherPitches: current(field).line.pitches,
             batterLine: { ...bat.order[bat.batterIdx]!.line },

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
-  avg, era, ipString, isPitcher, ops, rate3, whip, type LiveCommand, type LiveSituation, type PlayEvent, type Player, type PlayerSeasonStats, type Team,
+  avg, defenseAt, era, isPitcher, ops, rate3, whip, type FieldPosition, type LiveCommand, type LiveSituation, type PlayEvent, type Player, type PlayerSeasonStats, type Team,
 } from '../../engine';
 import { AnimatedField } from '../field/AnimatedField';
-import { arsenalSummary } from '../components/Arsenal';
 import type { Speed } from '../field/director';
 import { useStatsMap } from '../stats';
 import { useGame, useSave, useUserTeam } from '../../state/game';
@@ -13,10 +12,11 @@ import { engine } from '../../worker/client';
 import { BottomSheet } from '../components/BottomSheet';
 import { Icon } from '../components/Icon';
 import { RatingBadge } from '../components/Rating';
+import { MatchupPanel, type MatchupVariant } from '../components/Matchup';
 import { TeamBadge } from '../components/TeamBadge';
 import { fullName, shortName } from '../format';
 import { useOpenGame } from '../hooks';
-import { scoutedOverall } from '../scouting';
+import { scouted, scoutedOverall } from '../scouting';
 
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
@@ -113,6 +113,9 @@ function Live({
   const save = useSave();
   const team = useUserTeam();
   const [sheet, setSheet] = useState<'pinch' | 'pitcher' | null>(null);
+  // Temporary: compare matchup designs with ?mx=a|b|c.
+  const [params] = useSearchParams();
+  const variant = (params.get('mx') ?? 'a') as MatchupVariant;
   const teams = new Map(save.teams.map((t) => [t.id, t]));
   const players = new Map(save.players.map((p) => [p.id, p]));
   const away = teams.get(awayId)!;
@@ -205,14 +208,16 @@ function Live({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-line bg-surface p-3 @lg:p-4">
-          <div className="grid min-w-0 grid-cols-2 gap-3 @lg:grid-cols-1 @4xl:grid-cols-2">
-            <Matchup label="At bat" p={batter} userTeamId={team.id}
-              detail={`${s.batterLine.h}-${s.batterLine.ab} today${s.batterLine.hr ? `, ${s.batterLine.hr} HR` : ''}${s.batterLine.bb ? `, ${s.batterLine.bb} BB` : ''}`} />
-            <Matchup label="Pitching" p={pitcher} userTeamId={team.id}
-              detail={`${ipString(s.pitcherLine.outs)} IP, ${s.pitcherLine.so} K · ${s.pitcherPitches} pitches`} arsenal={arsenalSummary(pitcher)} />
-          </div>
-        </section>
+        <MatchupPanel
+          variant={variant}
+          s={s}
+          batter={batter}
+          pitcher={pitcher}
+          onDeck={players.get(s.onDeckId)}
+          battingTeam={battingTeam}
+          fieldingTeam={fieldingTeam}
+          userTeamId={team.id}
+        />
 
         <section className="rounded-2xl border border-line bg-surface p-3 @lg:p-4">
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Last plays</h2>
@@ -227,7 +232,8 @@ function Live({
 
       <PickSheet
         open={sheet !== null}
-        title={sheet === 'pinch' ? `Pinch hit for ${shortName(batter)}` : `Replace ${shortName(pitcher)}`}
+        title={sheet === 'pinch' ? `Pinch hit for ${shortName(batter)} (${s.batterPosition})` : `Replace ${shortName(pitcher)}`}
+        position={sheet === 'pinch' ? s.batterPosition : undefined}
         ids={sheet === 'pinch' ? s.bench : s.bullpen}
         players={players}
         userTeamId={team.id}
@@ -284,27 +290,18 @@ function seasonLine(p: Player, s: PlayerSeasonStats | undefined): string {
   return `${rate3(avg(s.bat))} AVG · ${rate3(ops(s.bat))} OPS · ${s.bat.hr} HR`;
 }
 
-function Matchup({ label, p, detail, userTeamId, arsenal }: { label: string; p: Player; detail: string; userTeamId: number; arsenal?: string | null }) {
-  const { ovr } = scoutedOverall(p, userTeamId);
-  const stats = useStatsMap();
-  return (
-    <div className="flex items-center gap-2">
-      <div className="min-w-0 flex-1">
-        <p className="text-[11px] uppercase tracking-wide text-muted">{label}</p>
-        <p className="truncate font-semibold">{fullName(p)}</p>
-        <p className="truncate text-xs text-muted">{detail}</p>
-        {arsenal && <p className="truncate text-xs text-muted" title="Repertoire">{arsenal}</p>}
-        <p className="truncate text-xs font-medium tabular-nums">{seasonLine(p, stats.get(p.id))}</p>
-      </div>
-      <RatingBadge value={ovr} size="sm" />
-    </div>
-  );
-}
-
 function PickSheet({
-  open, title, ids, players, userTeamId, onPick, onClose,
-}: { open: boolean; title: string; ids: number[]; players: Map<number, Player>; userTeamId: number; onPick: (id: number) => void; onClose: () => void }) {
+  open, title, ids, players, userTeamId, onPick, onClose, position,
+}: {
+  open: boolean; title: string; ids: number[]; players: Map<number, Player>; userTeamId: number; onPick: (id: number) => void; onClose: () => void;
+  /** For a pinch hitter: the position he'd take over, so the bench shows who can play it. */
+  position?: string;
+}) {
   const stats = useStatsMap();
+  const canPlay = (p: Player) => !!position && (position === 'DH' || position === 'P' || p.position === position || p.positionRatings[position as keyof Player['positionRatings']] !== undefined);
+  // Players who can handle the spot first, then the best gloves there.
+  const glove = (id: number) => (position && position !== 'DH' && position !== 'P' ? defenseAt(players.get(id)!, position as FieldPosition) : 0);
+  ids = position ? [...ids].sort((a, b) => Number(canPlay(players.get(b)!)) - Number(canPlay(players.get(a)!)) || glove(b) - glove(a)) : ids;
   return (
     <BottomSheet open={open} onClose={onClose} title={title}>
       <h2 className="mb-3 pr-10 text-xl font-bold">{title}</h2>
@@ -321,6 +318,11 @@ function PickSheet({
                   <span className="block truncate text-xs text-muted">
                     {isPitcher(p) ? `Throws ${p.throws}${tired ? ' · tired' : ''}` : `Bats ${p.bats}`} · {seasonLine(p, stats.get(id))}
                   </span>
+                  {position && position !== 'DH' && position !== 'P' && (
+                    <span className={`mt-0.5 block text-[11px] font-semibold ${canPlay(p) ? 'text-accent' : 'text-muted'}`}>
+                      {canPlay(p) ? 'Plays' : 'Out of position at'} {position} · glove {scouted(p, `def-${position}`, defenseAt(p, position as FieldPosition), userTeamId).value}
+                    </span>
+                  )}
                 </span>
                 <RatingBadge value={scoutedOverall(p, userTeamId).ovr} size="sm" />
               </button>
