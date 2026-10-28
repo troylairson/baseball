@@ -295,7 +295,7 @@ function Live({
           </div>
           {auto && !decision && <p className="mt-1 text-center text-[11px] text-muted">Autoplay is on: it pauses when there's a decision.</p>}
           <p className="mt-1 hidden text-center text-[11px] text-muted md:block">
-            Keys: Space next decision · Enter take the suggestion · N next batter · A autoplay
+            Space next decision · Enter suggestion · N batter · A autoplay
           </p>
         </section>
 

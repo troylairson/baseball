@@ -149,7 +149,7 @@ export function findDecision(s: LiveSituation, ctx: DecisionContext): Decision |
         if (s.pitcherPitches >= limit - 15) {
           return {
             key: `tired-${pitcher.id}-${half}`, kind: 'pitching', title: `${last(pitcher)} is tiring`,
-            detail: `${s.pitcherPitches} pitches${s.pitcherLine.r ? `, ${s.pitcherLine.r} run${s.pitcherLine.r > 1 ? 's' : ''} allowed` : ''}.`, suggestion: bring,
+            detail: `${s.pitcherPitches} pitches (${orders.starterPitchLimit ? 'your limit' : 'he usually lasts about'} ${Math.round(limit)})${s.pitcherLine.r ? `, ${s.pitcherLine.r} run${s.pitcherLine.r > 1 ? 's' : ''} allowed` : ''}.`, suggestion: bring,
           };
         }
         if (s.pitcherLine.r >= 4 && s.bases.some((b) => b !== null)) {
@@ -175,7 +175,7 @@ export function findDecision(s: LiveSituation, ctx: DecisionContext): Decision |
       };
     }
     if (stops.bigMoment && s.inning >= 8 && Math.abs(lead) <= 1 && risp) {
-      return { key: `big-${half}-${batter.id}`, kind: 'bigMoment', title: 'Big spot', detail: `${lead > 0 ? 'Tying' : 'Go-ahead'} run in scoring position, ${s.outs} out.` };
+      return { key: `big-${half}`, kind: 'bigMoment', title: 'Big spot', detail: `${lead > 0 ? 'Tying' : lead === 0 ? 'Go-ahead' : 'Their insurance'} run in scoring position, ${s.outs} out.` };
     }
     return null;
   }
@@ -213,7 +213,7 @@ export function findDecision(s: LiveSituation, ctx: DecisionContext): Decision |
     }
   }
   if (stops.bigMoment && late && Math.abs(lead) <= 1 && risp && s.inning >= 8) {
-    return { key: `big-${half}-${batter.id}`, kind: 'bigMoment', title: 'Big spot', detail: `${lead < 0 ? 'Tying' : lead === 0 ? 'Go-ahead' : 'Insurance'} run in scoring position, ${s.outs} out.` };
+    return { key: `big-${half}`, kind: 'bigMoment', title: 'Big spot', detail: `${lead < 0 ? 'Tying' : lead === 0 ? 'Go-ahead' : 'Insurance'} run in scoring position, ${s.outs} out.` };
   }
   return null;
 }
