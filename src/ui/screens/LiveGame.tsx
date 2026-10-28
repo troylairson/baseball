@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   avg, defenseAt, era, isPitcher, ops, rate3, whip, type FieldPosition, type LiveCommand, type LiveSituation, type PlayEvent, type Player, type PlayerSeasonStats, type Team,
 } from '../../engine';
@@ -12,7 +12,7 @@ import { engine } from '../../worker/client';
 import { BottomSheet } from '../components/BottomSheet';
 import { Icon } from '../components/Icon';
 import { RatingBadge } from '../components/Rating';
-import { MatchupPanel, type MatchupVariant } from '../components/Matchup';
+import { MatchupPanel } from '../components/Matchup';
 import { TeamBadge } from '../components/TeamBadge';
 import { fullName, shortName } from '../format';
 import { useOpenGame } from '../hooks';
@@ -113,9 +113,6 @@ function Live({
   const save = useSave();
   const team = useUserTeam();
   const [sheet, setSheet] = useState<'pinch' | 'pitcher' | null>(null);
-  // Temporary: compare matchup designs with ?mx=a|b|c.
-  const [params] = useSearchParams();
-  const variant = (params.get('mx') ?? 'a') as MatchupVariant;
   const teams = new Map(save.teams.map((t) => [t.id, t]));
   const players = new Map(save.players.map((p) => [p.id, p]));
   const away = teams.get(awayId)!;
@@ -209,7 +206,6 @@ function Live({
         </section>
 
         <MatchupPanel
-          variant={variant}
           s={s}
           batter={batter}
           pitcher={pitcher}
