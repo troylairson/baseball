@@ -75,6 +75,8 @@ export interface LiveSituation {
   onDeckId: number;
   pitcherId: number;
   pitcherPitches: number;
+  /** How the current pitcher is being used: starter, closer, setup or middle relief. */
+  pitcherRole: 'SP' | 'CL' | 'SU' | 'MR';
   /** Today's lines so far. */
   batterLine: BattingLine;
   pitcherLine: PitchingLine;
@@ -100,6 +102,15 @@ export function stealTarget(bases: readonly (unknown | null)[]): 2 | 3 | null {
 
 export interface LiveControl {
   teamId: number;
+  /** The manager's standing pitching orders for his own team. */
+  orders?: PitchingOrders;
+}
+
+export interface PitchingOrders {
+  /** Pull the starter at this many pitches (instead of the staff's own read). */
+  starterPitchLimit?: number | null;
+  /** Bring in the closer to start the 9th with a save-sized lead. */
+  closerInSave?: boolean;
 }
 
 export interface GameResult {
@@ -156,6 +167,8 @@ interface Side {
   innings: number[];
   /** Pitcher of record when this team last took the lead, and the opposing pitcher charged. */
   goAhead: { winner: number; loser: number } | null;
+  /** The pitcher was pinch-hit for: a reliever takes over next time this team fields. */
+  pitcherBatted?: boolean;
 }
 
 const DEFENSE_WEIGHT: Record<FieldPosition, number> = { C: 1.4, SS: 1.4, CF: 1.3, '2B': 1.2, '3B': 1.0, RF: 0.9, LF: 0.8, '1B': 0.6 };
@@ -396,10 +409,26 @@ export function* liveGame(
 
   /** Decide whether the fielding team changes pitchers. */
   const managePitcher = (field: Side, inning: number, lead: number, outs: number, startOfInning: boolean) => {
+    // A pitcher who was pinch-hit for is out of the game.
+    if (startOfInning && field.pitcherBatted) {
+      field.pitcherBatted = false;
+      if (callBullpen(field, inning, lead, outs)) return;
+    }
     const app = current(field);
     const p = field.players.get(app.playerId)!;
     const leash = strat(field).starterLeash;
-    const limit = limitFor(p, app.role === 'SP') + (app.role === 'SP' ? [-12, 0, 10][leash]! : 0);
+    const orders = control && field.input.team.id === control.teamId ? control.orders : undefined;
+    // A manager's pitch count replaces the staff's read (the "pull at limit - 8" margin is kept off it).
+    const limit = app.role === 'SP' && orders?.starterPitchLimit
+      ? orders.starterPitchLimit + 8
+      : limitFor(p, app.role === 'SP') + (app.role === 'SP' ? [-12, 0, 10][leash]! : 0);
+    if (orders?.closerInSave && startOfInning && inning >= 9 && lead >= 1 && lead <= 3 && app.role !== 'CL') {
+      const closer = field.input.plan.closer;
+      if (closer !== null && !used(field).has(closer) && (field.players.get(closer)?.fatigue ?? 100) < RELIEVER_TIRED) {
+        callBullpen(field, inning, lead, outs);
+        return;
+      }
+    }
     const pitches = app.line.pitches;
     const blowup = [5, 6, 7][leash]!;
     let pull: boolean;
@@ -431,6 +460,7 @@ export function* liveGame(
     const idx = side.batterIdx;
     const out = side.order[idx]!;
     const entry = { playerId, position: out.position, line: { ...emptyBatting(), g: 1 } };
+    if (out.position === 'P' && out.playerId === current(side).playerId) side.pitcherBatted = true;
     side.order[idx] = entry;
     side.batters.set(playerId, entry);
     side.lineup[idx] = { playerId, position: out.position };
@@ -511,6 +541,7 @@ export function* liveGame(
             onDeckId: bat.order[(bat.batterIdx + 1) % bat.order.length]!.playerId,
             pitcherId: current(field).playerId,
             pitcherPitches: current(field).line.pitches,
+            pitcherRole: current(field).role,
             batterLine: { ...bat.order[bat.batterIdx]!.line },
             pitcherLine: { ...current(field).line },
             userBatting,

@@ -3,6 +3,7 @@ import {
   acceptOffer, applyTrendAction, makeOffer, withdrawOffer, resolveRound, MARKET_ROUNDS, exportRoster, leagueFromRoster, mlbPackToRoster, parseRosterFile, type MlbPack, type TrendAction, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
   type SeasonState, type TeamStrategy, type TradeProposal, type AdviceAction, type GameResult, type LiveCommand, type LiveSituation, type PlayEvent,
+  findDecision, standingOrder, withDefaults, type Decision, type GamePlan, type LiveControl, type LiveOrders, type PitchingOrders,
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
 import {
@@ -23,7 +24,13 @@ export interface TeamPreview {
 }
 
 export type LiveState =
-  | { status: 'live'; gameId: number; awayId: number; homeId: number; situation: LiveSituation; save?: LoadedSave }
+  | {
+    status: 'live'; gameId: number; awayId: number; homeId: number; situation: LiveSituation; save?: LoadedSave;
+    /** A moment worth deciding, with the assistant's suggestion. */
+    decision?: Decision | null;
+    /** Plate appearances played without stopping on the way here. */
+    skipped?: number;
+  }
   | { status: 'final'; gameId: number; save: LoadedSave; /** Plays since the last pause (the game-ending sequence). */ events?: PlayEvent[] }
   | { status: 'none'; reason: string; save?: LoadedSave };
 
@@ -57,7 +64,35 @@ export function createEngineApi(db = new GameDB()) {
     awayId: number;
     homeId: number;
     situation: LiveSituation;
+    /** Shared with the engine, so changed orders apply mid-game. */
+    control: LiveControl & { orders: PitchingOrders };
+    plan: GamePlan;
+    /** Moments the manager chose to play through. */
+    dismissed: Set<string>;
+    decision: Decision | null;
   } | null = null;
+
+  const ordersOf = (state: SeasonState) => withDefaults(state.league.liveOrders);
+  const decisionCtx = () => {
+    const { state } = current();
+    return { players: new Map(state.players.map((p) => [p.id, p])), plan: live!.plan, orders: ordersOf(state) };
+  };
+  /** The decision at the current situation, unless the manager already played through it. */
+  const decide = (ctx: ReturnType<typeof decisionCtx>) => {
+    const d = findDecision(live!.situation, ctx);
+    live!.decision = d && !live!.dismissed.has(d.key) ? d : null;
+    return live!.decision;
+  };
+  const liveState = (extra: { skipped?: number; save?: LoadedSave } = {}): LiveState => ({
+    status: 'live', gameId: live!.gameId, awayId: live!.awayId, homeId: live!.homeId, situation: live!.situation, decision: live!.decision, ...extra,
+  });
+  /** Play one step: the manager's command, or (for "auto") whatever a standing order calls for. */
+  const stepLive = (cmd: LiveCommand, ctx: ReturnType<typeof decisionCtx>) => {
+    const order = cmd.type === 'auto' ? standingOrder(live!.situation, ctx) : null;
+    // Only the manager's orders send his runners: otherwise the batter just hits.
+    const play = order ?? (cmd.type === 'auto' && live!.situation.userBatting ? { type: 'swing' as const } : cmd);
+    return live!.gen.next(play);
+  };
 
   const open = async (saveId: string): Promise<LoadedSave | null> => {
     const save = await loadSave(db, saveId);
@@ -220,7 +255,7 @@ export function createEngineApi(db = new GameDB()) {
      * then pauses before each of their plate appearances.
      */
     async liveStart(): Promise<LiveState> {
-      if (live) return { status: 'live', gameId: live.gameId, awayId: live.awayId, homeId: live.homeId, situation: live.situation };
+      if (live) return liveState();
       const { state } = current();
       const played: PlayedGame[] = [];
       let setup = prepareLiveGame(state);
@@ -234,22 +269,61 @@ export function createEngineApi(db = new GameDB()) {
       // Always send a fresh snapshot: the season may have just started (phase/date changed).
       const save = played.length ? await persistPlayed(played) : sync();
       if (!setup) return { status: 'none', reason: 'Your team has no game to play right now.', save };
-      const gen = liveGame(setup.away, setup.home, setup.useDH, setup.rng, true, setup.norms, { teamId: state.userTeamId });
+      const orders = ordersOf(state);
+      const control = { teamId: state.userTeamId, orders: { starterPitchLimit: orders.starterPitchLimit, closerInSave: orders.closerInSave } };
+      const gen = liveGame(setup.away, setup.home, setup.useDH, setup.rng, true, setup.norms, control);
       const step = gen.next();
       if (step.done) {
         const day = simDay(state, new Map([[setup.game.id, step.value]]));
         return { status: 'final', gameId: setup.game.id, save: await persistPlayed([...played, ...day]) };
       }
-      live = { gen, gameId: setup.game.id, awayId: setup.game.awayId, homeId: setup.game.homeId, situation: step.value };
-      return { status: 'live', gameId: live.gameId, awayId: live.awayId, homeId: live.homeId, situation: step.value, save };
+      const plan = (setup.away.team.id === state.userTeamId ? setup.away : setup.home).plan;
+      live = { gen, gameId: setup.game.id, awayId: setup.game.awayId, homeId: setup.game.homeId, situation: step.value, control, plan, dismissed: new Set(), decision: null };
+      decide(decisionCtx());
+      return liveState({ save });
     },
 
     async liveCommand(cmd: LiveCommand): Promise<LiveState> {
       if (!live) return { status: 'none', reason: 'No live game in progress.' };
-      const step = live.gen.next(cmd);
+      const ctx = decisionCtx();
+      // Acting on (or past) a decision settles it.
+      if (live.decision) live.dismissed.add(live.decision.key);
+      const step = stepLive(cmd, ctx);
       if (step.done) return finishLive(step.value);
       live.situation = step.value;
-      return { status: 'live', gameId: live.gameId, awayId: live.awayId, homeId: live.homeId, situation: step.value };
+      decide(ctx);
+      return liveState();
+    },
+
+    /**
+     * Play on until something is worth deciding (or the game ends), carrying
+     * out standing orders along the way. Only the last play is animated.
+     */
+    async liveAdvance(): Promise<LiveState> {
+      if (!live) return { status: 'none', reason: 'No live game in progress.' };
+      const ctx = decisionCtx();
+      if (live.decision) live.dismissed.add(live.decision.key);
+      let skipped = 0;
+      for (;;) {
+        const step = stepLive({ type: 'auto' }, ctx);
+        if (step.done) return finishLive(step.value);
+        live.situation = step.value;
+        if (decide(ctx)) break;
+        skipped++;
+      }
+      return liveState({ skipped });
+    },
+
+    /** Change standing orders (also for a game in progress). */
+    async setLiveOrders(orders: LiveOrders): Promise<ActionResult> {
+      const { state } = current();
+      state.league.liveOrders = orders;
+      if (live) {
+        live.control.orders.starterPitchLimit = orders.starterPitchLimit;
+        live.control.orders.closerInSave = orders.closerInSave;
+        decide(decisionCtx());
+      }
+      return commit();
     },
 
     /** Let the AI manage the rest of the live game. */
@@ -264,11 +338,16 @@ export function createEngineApi(db = new GameDB()) {
     async liveSimInning(): Promise<LiveState> {
       if (!live) return { status: 'none', reason: 'No live game in progress.' };
       const { inning, half } = live.situation;
-      let step = live.gen.next({ type: 'auto' });
-      while (!step.done && step.value.inning === inning && step.value.half === half) step = live.gen.next({ type: 'auto' });
+      const ctx = decisionCtx();
+      let step = stepLive({ type: 'auto' }, ctx);
+      while (!step.done && step.value.inning === inning && step.value.half === half) {
+        live.situation = step.value;
+        step = stepLive({ type: 'auto' }, ctx);
+      }
       if (step.done) return finishLive(step.value);
       live.situation = step.value;
-      return { status: 'live', gameId: live.gameId, awayId: live.awayId, homeId: live.homeId, situation: step.value };
+      decide(decisionCtx());
+      return liveState();
     },
 
     hasLiveGame: () => live !== null,

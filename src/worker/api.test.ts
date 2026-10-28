@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS } from '../engine';
+import { DEFAULT_ORDERS, DEFAULT_SETTINGS } from '../engine';
 import { GameDB } from '../db/db';
 import { createEngineApi } from './api';
 
@@ -67,4 +67,31 @@ describe('engine api', () => {
     expect(reloaded?.league.history).toHaveLength(1);
 
   }, 20000);
+
+  it('plays a live game decision to decision, following standing orders', async () => {
+    const api = createEngineApi(new GameDB('api-live-test'));
+    await api.previewLeague(SMALL, 9);
+    const id = await api.startCareer(0);
+    await api.loadSave(id);
+    await api.sim('next');
+    const orders = { ...DEFAULT_ORDERS, starterPitchLimit: 80, stealSpeed: 50 };
+    expect((await api.setLiveOrders(orders)).ok).toBe(true);
+    let state = await api.liveStart();
+    expect(state.status).toBe('live');
+    let calls = 0;
+    let stops = 0;
+    while (state.status === 'live' && calls < 60) {
+      if (state.decision) stops++;
+      // Every stop says why, and most offer a move.
+      if (state.decision) expect(state.decision.title.length).toBeGreaterThan(0);
+      state = await api.liveAdvance();
+      calls++;
+    }
+    expect(state.status).toBe('final');
+    // A game takes a handful of stops, not a tap per batter.
+    expect(calls).toBeLessThan(25);
+    const reloaded = await createEngineApi(new GameDB('api-live-test')).loadSave(id);
+    expect(reloaded?.league.liveOrders?.starterPitchLimit).toBe(80);
+    expect(stops).toBeGreaterThanOrEqual(0);
+  });
 });

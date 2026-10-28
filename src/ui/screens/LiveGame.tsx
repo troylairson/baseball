@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  avg, defenseAt, era, stealTarget, isPitcher, ops, rate3, whip, type FieldPosition, type LiveCommand, type LiveSituation, type PlayEvent, type Player, type PlayerSeasonStats, type Team,
+  avg, defenseAt, era, stealTarget, isPitcher, ops, rate3, whip, type Decision, type FieldPosition, type LiveCommand, type LiveSituation, type PlayEvent, type Player, type PlayerSeasonStats, type Team,
 } from '../../engine';
 import { AnimatedField } from '../field/AnimatedField';
 import type { Speed } from '../field/director';
@@ -13,6 +13,7 @@ import { BottomSheet } from '../components/BottomSheet';
 import { Icon } from '../components/Icon';
 import { RatingBadge } from '../components/Rating';
 import { MatchupPanel } from '../components/Matchup';
+import { DecisionCard, OrdersSheet } from '../components/LiveAssist';
 import { TeamBadge } from '../components/TeamBadge';
 import { fullName, shortName } from '../format';
 import { useOpenGame } from '../hooks';
@@ -21,6 +22,15 @@ import { scouted, scoutedOverall } from '../scouting';
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
 const SPEED_KEY = 'dgm.fieldSpeed';
+const AUTO_KEY = 'dgm.liveAutoplay';
+
+function initialAuto(): boolean {
+  try {
+    return localStorage.getItem(AUTO_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 function initialSpeed(): Speed {
   try {
@@ -74,6 +84,21 @@ export function LiveGame() {
     setBusy(false);
   };
 
+  // Autoplay: one batter at a time at the animation's pace, pausing whenever there's a decision.
+  const [auto, setAutoState] = useState(initialAuto);
+  const setAuto = (v: boolean) => {
+    setAutoState(v);
+    try { localStorage.setItem(AUTO_KEY, v ? '1' : '0'); } catch { /* storage unavailable */ }
+  };
+  const waiting = state?.status === 'live' && !!state.decision;
+  useEffect(() => {
+    if (!auto || busy || queue.length || state?.status !== 'live' || waiting) return;
+    const t = setTimeout(() => void run(() => engine().liveCommand({ type: 'auto' })), speed === 'instant' ? 700 : 350);
+    return () => clearTimeout(t);
+    // run is recreated each render; the state it needs is in the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, busy, queue.length, state, waiting, speed]);
+
   // Keep the field on screen while the game-ending play animates.
   const view = queue.length && shown?.status === 'live' ? shown : state;
   if (!state || !view) return <p className="py-20 text-center text-muted">Heading to the ballpark…</p>;
@@ -97,22 +122,28 @@ export function LiveGame() {
       setSpeed={setSpeed}
       onPlayed={settle}
       command={(cmd) => void run(() => engine().liveCommand(cmd))}
+      advance={() => void run(() => engine().liveAdvance())}
       simInning={() => void run(() => engine().liveSimInning(), false)}
       finish={() => void run(() => engine().liveFinish(), false)}
+      decision={state.status === 'live' ? state.decision ?? null : null}
+      skipped={state.status === 'live' ? state.skipped : undefined}
+      auto={auto}
+      setAuto={setAuto}
     />
   );
 }
 
 function Live({
-  s, awayId, homeId, busy, queue, speed, setSpeed, onPlayed, command, simInning, finish,
+  s, awayId, homeId, busy, queue, speed, setSpeed, onPlayed, command, advance, simInning, finish, decision, skipped, auto, setAuto,
 }: {
   s: LiveSituation; awayId: number; homeId: number; busy: boolean;
   queue: PlayEvent[]; speed: Speed; setSpeed: (s: Speed) => void; onPlayed: () => void;
-  command: (c: LiveCommand) => void; simInning: () => void; finish: () => void;
+  command: (c: LiveCommand) => void; advance: () => void; simInning: () => void; finish: () => void;
+  decision: Decision | null; skipped?: number; auto: boolean; setAuto: (v: boolean) => void;
 }) {
   const save = useSave();
   const team = useUserTeam();
-  const [sheet, setSheet] = useState<'pinch' | 'pitcher' | null>(null);
+  const [sheet, setSheet] = useState<'pinch' | 'pitcher' | 'orders' | null>(null);
   const teams = new Map(save.teams.map((t) => [t.id, t]));
   const players = new Map(save.players.map((p) => [p.id, p]));
   const away = teams.get(awayId)!;
@@ -131,6 +162,42 @@ function Live({
   const fieldingTeam = s.half === 'top' ? home : away;
 
   const btn = 'h-11 rounded-xl border border-line bg-surface px-3 text-sm font-semibold hover:bg-surface-2 disabled:opacity-40';
+  const accept = () => decision?.suggestion && command(decision.suggestion.command);
+  const nextBatter = () => command({ type: 'auto' });
+
+  // Keyboard shortcuts (desktop): the common calls without the mouse.
+  const keys = useRef({ accept, advance, nextBatter, command, canSteal, canBunt, s, busy, sheet, auto, setAuto, decision });
+  useEffect(() => {
+    keys.current = { accept, advance, nextBatter, command, canSteal, canBunt, s, busy, sheet, auto, setAuto, decision };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const k = keys.current;
+      const target = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || k.sheet || target?.closest('input, select, textarea, [role=dialog]')) return;
+      const key = e.key.toLowerCase();
+      if (key === 'a') return void k.setAuto(!k.auto);
+      if (k.busy) return;
+      const map: Record<string, () => void> = {
+        ' ': k.advance,
+        enter: () => (k.decision?.suggestion ? k.accept() : k.advance()),
+        n: k.nextBatter,
+        s: () => k.canSteal && k.command({ type: 'steal' }),
+        b: () => k.canBunt && k.command({ type: 'bunt' }),
+        w: () => !k.s.userBatting && k.command({ type: 'ibb' }),
+        h: () => k.s.userBatting && k.s.bench.length && setSheet('pinch'),
+        p: () => !k.s.userBatting && k.s.bullpen.length && setSheet('pitcher'),
+        o: () => setSheet('orders'),
+      };
+      const fn = map[key];
+      if (fn) {
+        e.preventDefault();
+        fn();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     // Narrow screens stack everything; with room for two columns the field sits on the left and the rest on the right.
@@ -181,31 +248,55 @@ function Live({
 
         {/* Manager controls: pinned above the tab bar on upright phones, in the column otherwise. */}
         <section className="pb-safe @container sticky bottom-20 z-20 order-last rounded-2xl border border-line bg-surface p-3 shadow-lg @lg:static @lg:order-none @lg:shadow-none">
+          {decision && (
+            <DecisionCard decision={decision} skipped={skipped} busy={busy} onAccept={accept} onKeepGoing={advance} />
+          )}
           <div className="grid grid-cols-3 gap-2 [&>button]:h-9 [&>button]:text-xs">
             {s.userBatting ? (
               <>
-                <button className={btn} disabled={busy || !canSteal} onClick={() => command({ type: 'steal' })}>{stealLabel}</button>
-                <button className={btn} disabled={busy || !canBunt} onClick={() => command({ type: 'bunt' })}>Bunt</button>
-                <button className={btn} disabled={busy || s.bench.length === 0} onClick={() => setSheet('pinch')}>Pinch hit</button>
+                <button className={btn} disabled={busy || !canSteal} onClick={() => command({ type: 'steal' })}>{stealLabel}<Kbd k="S" /></button>
+                <button className={btn} disabled={busy || !canBunt} onClick={() => command({ type: 'bunt' })}>Bunt<Kbd k="B" /></button>
+                <button className={btn} disabled={busy || s.bench.length === 0} onClick={() => setSheet('pinch')}>Pinch hit<Kbd k="H" /></button>
               </>
             ) : (
               <>
-                <button className={btn} disabled={busy} onClick={() => command({ type: 'ibb' })}>Walk him</button>
-                <button className={`${btn} col-span-2`} disabled={busy || s.bullpen.length === 0} onClick={() => setSheet('pitcher')}>Pitching change</button>
+                <button className={btn} disabled={busy} onClick={() => command({ type: 'ibb' })}>Walk him<Kbd k="W" /></button>
+                <button className={`${btn} col-span-2`} disabled={busy || s.bullpen.length === 0} onClick={() => setSheet('pitcher')}>Pitching change<Kbd k="P" /></button>
               </>
             )}
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2 @xs:grid-cols-[1fr_auto_auto]">
+          <div className="mt-2 grid grid-cols-[1fr_auto_auto] gap-2">
             <button
-              onClick={() => command({ type: s.userBatting ? 'swing' : 'auto' })}
+              onClick={advance}
               disabled={busy}
-              className="col-span-2 @xs:col-span-1 flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl bg-accent font-semibold text-accent-contrast disabled:opacity-60"
+              className="flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl bg-accent px-2 font-semibold text-accent-contrast disabled:opacity-60"
+              title="Play until there's a decision to make (Space)"
             >
-              <Icon name="play" className="size-4 shrink-0" /> <span className="truncate">{s.userBatting ? 'Swing away' : 'Pitch to him'}</span>
+              <Icon name="forward" className="size-4 shrink-0" /> <span className="truncate">Next decision</span>
             </button>
-            <button className={`${btn} text-xs`} disabled={busy} onClick={simInning} aria-label="Sim half-inning">Sim ½ inn</button>
-            <button className={`${btn} text-xs`} disabled={busy} onClick={finish} aria-label="Sim to end">Sim game</button>
+            <button className={`${btn} text-xs`} disabled={busy} onClick={nextBatter} title="Play one batter (N)">
+              Next batter
+            </button>
+            <button
+              className={`${btn} flex items-center gap-1 text-xs ${auto ? 'border-accent text-accent' : ''}`}
+              onClick={() => setAuto(!auto)}
+              aria-pressed={auto}
+              title="Play on by itself, pausing at decisions (A)"
+            >
+              <Icon name={auto ? 'pause' : 'play'} className="size-3.5" /> Auto
+            </button>
           </div>
+          <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+            <div className="flex gap-1">
+              <button className="h-8 rounded-lg px-2 font-medium text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-40" disabled={busy} onClick={simInning}>Sim ½ inning</button>
+              <button className="h-8 rounded-lg px-2 font-medium text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-40" disabled={busy} onClick={finish}>Sim game</button>
+            </div>
+            <button className="h-8 rounded-lg px-2 font-medium text-accent hover:bg-surface-2" onClick={() => setSheet('orders')}>Standing orders<Kbd k="O" /></button>
+          </div>
+          {auto && !decision && <p className="mt-1 text-center text-[11px] text-muted">Autoplay is on: it pauses when there's a decision.</p>}
+          <p className="mt-1 hidden text-center text-[11px] text-muted md:block">
+            Keys: Space next decision · Enter take the suggestion · N next batter · A autoplay
+          </p>
         </section>
 
         <MatchupPanel
@@ -229,8 +320,9 @@ function Live({
       </div>
 
 
+      <OrdersSheet open={sheet === 'orders'} onClose={() => setSheet(null)} />
       <PickSheet
-        open={sheet !== null}
+        open={sheet === 'pinch' || sheet === 'pitcher'}
         title={sheet === 'pinch' ? `Pinch hit for ${shortName(batter)} (${s.batterPosition})` : `Replace ${shortName(pitcher)}`}
         position={sheet === 'pinch' ? s.batterPosition : undefined}
         ids={sheet === 'pinch' ? s.bench : s.bullpen}
@@ -245,6 +337,11 @@ function Live({
     </div>
     </div>
   );
+}
+
+/** A keyboard shortcut hint, shown on desktop only. */
+function Kbd({ k }: { k: string }) {
+  return <kbd className="ml-1.5 hidden rounded bg-surface-2 px-1 text-[10px] font-medium text-muted md:inline">{k}</kbd>;
 }
 
 function ScoreSide({ team, runs, hits, batting, right }: { team: Team; runs: number; hits: number; batting: boolean; right?: boolean }) {

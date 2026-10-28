@@ -322,6 +322,8 @@ export interface League {
   nextOfferId?: number;
   /** Offseason free agent market, while it is open. */
   market?: import('../season/market').MarketState | null;
+  /** The manager's standing orders for live games. */
+  liveOrders?: Partial<import('../sim/decisions').LiveOrders>;
   /** All coaches/scouts, employed or available. */
   staff?: import('../season/staff').StaffMember[];
 }
