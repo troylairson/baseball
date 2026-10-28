@@ -88,6 +88,16 @@ export interface LiveSituation {
   events: PlayEvent[];
 }
 
+/**
+ * The base a steal goes for: the lead runner's next base when it's open
+ * (2 = first to second, 3 = second to third), or null.
+ */
+export function stealTarget(bases: readonly (unknown | null)[]): 2 | 3 | null {
+  if (bases[1] && !bases[2]) return 3;
+  if (bases[0] && !bases[1]) return 2;
+  return null;
+}
+
 export interface LiveControl {
   teamId: number;
 }
@@ -523,31 +533,53 @@ export function* liveGame(
         const app = current(field);
         const pitcher = field.players.get(app.playerId)!;
 
-        // Stolen base attempt: runner on first, second open.
-        const onFirst = bases[0];
-        if (onFirst && !bases[1] && outs < 2 && tactic !== 'swing' && tactic !== 'ibb' && tactic !== 'bunt') {
-          const runner = bat.players.get(onFirst.id)!;
+        // Stolen base attempt. The AI runs on its own only from first with second open and
+        // fewer than two outs; a manager can also send a runner to third, or with two outs.
+        const lead = stealTarget(bases);
+        const autoSteal = tactic !== 'steal' && (() => {
+          const onFirst = bases[0];
+          if (!onFirst || bases[1] || outs >= 2 || tactic === 'swing' || tactic === 'ibb' || tactic === 'bunt') return false;
+          const speed = bat.players.get(onFirst.id)!.batting.speed;
+          return speed > 40 && rng.chance((speed - 40) * 0.012 * [0.45, 1, 1.7][strat(bat).baserunning]!);
+        })();
+        if (lead !== null && (tactic === 'steal' || autoSteal)) {
+          const to = lead;
+          const from = (to - 1) as 1 | 2;
+          const stealer = bases[from - 1]!;
+          const runner = bat.players.get(stealer.id)!;
           const speed = runner.batting.speed;
-          if (tactic === 'steal' || (speed > 40 && rng.chance((speed - 40) * 0.012 * [0.45, 1, 1.7][strat(bat).baserunning]!))) {
-            const line = bat.batters.get(onFirst.id)!.line;
-            beginPlay(bases, outs);
-            const steal = { kind: 'steal' as const, pitcherId: app.playerId, fielders: [2, fx.chance(0.6) ? 6 : 4] as Fielder[] };
-            if (rng.chance(0.72 + (speed - 55) * 0.007 - (field.catcherArm - 50) * 0.004)) {
-              line.sb++;
-              bases[1] = onFirst;
+          const line = bat.batters.get(stealer.id)!.line;
+          // A runner behind him goes too (a double steal) and is safe if the lead runner is.
+          const trailer = to === 3 ? bases[0] : null;
+          beginPlay(bases, outs);
+          const steal = { kind: 'steal' as const, pitcherId: app.playerId, fielders: [2, to === 3 ? 5 : fx.chance(0.6) ? 6 : 4] as Fielder[] };
+          // Third is a shorter throw for the catcher: a little harder to steal.
+          const success = 0.72 + (speed - 55) * 0.007 - (field.catcherArm - 50) * 0.004 - (to === 3 ? 0.04 : 0);
+          const who = trailer ? `${name(bat, stealer.id)} and ${name(bat, trailer.id)} pull a double steal` : `${name(bat, stealer.id)} steals ${to === 3 ? 'third' : 'second'}`;
+          if (rng.chance(success)) {
+            line.sb++;
+            bases[to - 1] = stealer;
+            bases[from - 1] = null;
+            if (trailer) {
+              bat.batters.get(trailer.id)!.line.sb++;
+              bases[1] = trailer;
               bases[0] = null;
-              say(`  ${name(bat, onFirst.id)} steals second.`);
-              endPlay(bat, bases, outs, steal);
-            } else {
-              line.cs++;
-              bases[0] = null;
-              outs++;
-              app.line.outs++;
-              say(`  ${name(bat, onFirst.id)} caught stealing.`);
-              markOut(onFirst.id, 2);
-              endPlay(bat, bases, outs, steal);
-              continue;
             }
+            say(`  ${who}.`);
+            endPlay(bat, bases, outs, steal);
+          } else {
+            line.cs++;
+            bases[from - 1] = null;
+            if (trailer) {
+              bases[1] = trailer;
+              bases[0] = null;
+            }
+            outs++;
+            app.line.outs++;
+            say(`  ${name(bat, stealer.id)} caught stealing ${to === 3 ? 'third' : 'second'}${trailer ? `; ${name(bat, trailer.id)} takes second` : ''}.`);
+            markOut(stealer.id, to);
+            endPlay(bat, bases, outs, steal);
+            continue;
           }
         }
 

@@ -10,7 +10,7 @@ export * from './season/season';
 export { autoPlan, defenseAt, fitAt, resolvePlan } from './sim/lineup';
 export * from './season/roster';
 export type { GamePlan, LineupSlot } from './sim/lineup';
-export { liveGame } from './sim/game';
+export { liveGame, stealTarget } from './sim/game';
 export type { GameResult, TeamBox, BoxBatter, BoxPitcher, LiveCommand, LiveSituation } from './sim/game';
 export * from './season/playoffs';
 export * from './season/offseason';

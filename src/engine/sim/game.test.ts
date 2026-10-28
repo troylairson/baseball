@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateLeague } from '../generate/league';
 import { Rng } from '../rng';
-import { liveGame, simGame, type TeamGameInput } from './game';
+import { liveGame, simGame, stealTarget, type TeamGameInput } from './game';
 import { autoPlan } from './lineup';
 
 const { teams, players } = generateLeague(8);
@@ -119,5 +119,39 @@ describe('liveGame', () => {
     expect(away.pitchers.length).toBeGreaterThan(1);
     expect(r.log.some((l) => l.includes('intentionally walked'))).toBe(true);
     expect(away.batters.reduce((s, b) => s + b.line.r, 0)).toBe(away.runs);
+  });
+});
+
+describe('managed steals', () => {
+  it('can send runners to third, with two outs, and on a double steal', () => {
+    const logs: string[] = [];
+    let twoOut = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const gen = liveGame(input(0, true), input(1, true), true, new Rng(seed), true, undefined, { teamId: 0 });
+      let step = gen.next();
+      while (!step.done) {
+        const s = step.value;
+        const go = s.userBatting && stealTarget(s.bases) !== null;
+        if (go && s.outs === 2) twoOut++;
+        step = gen.next({ type: go ? 'steal' : 'auto' });
+      }
+      logs.push(...step.value.log);
+      // Box score stays consistent: every stolen base or caught stealing is on a batter's line.
+      const sb = [...step.value.away.batters, ...step.value.home.batters].reduce((n, b) => n + b.line.sb + b.line.cs, 0);
+      expect(sb).toBeGreaterThan(0);
+    }
+    expect(logs.some((l) => /steals third/.test(l))).toBe(true);
+    expect(logs.some((l) => /double steal/.test(l))).toBe(true);
+    expect(logs.some((l) => /caught stealing third/.test(l))).toBe(true);
+    expect(twoOut).toBeGreaterThan(0);
+  });
+
+  it('picks the lead runner with an open base ahead', () => {
+    expect(stealTarget([1, null, null])).toBe(2);
+    expect(stealTarget([null, 1, null])).toBe(3);
+    expect(stealTarget([1, 1, null])).toBe(3);
+    expect(stealTarget([1, null, 1])).toBe(2);
+    expect(stealTarget([1, 1, 1])).toBeNull();
+    expect(stealTarget([null, null, 1])).toBeNull();
   });
 });

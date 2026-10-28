@@ -201,16 +201,24 @@ export function buildTimeline({ event: e, speed }: DirectorInput): Timeline {
 
   // --- Steal -----------------------------------------------------------------
   if (e.kind === 'steal') {
-    const r = e.runners[0]!;
+    // Every runner goes on the pitch; the catcher throws to the lead runner's base.
+    const moving = e.runners.filter((x) => x.from > 0 && x.to > x.from);
+    if (!moving.length) return b.build(400);
+    const lead = moving.reduce((a, x) => (x.from > a.from ? x : a), moving[0]!);
     const release = Math.max(0, contact - PITCH_MS);
-    const arrive = runPath(b, `r${r.id}`, 1, 2, release, BASE_MS * 2.2);
+    let arrive = release;
+    for (const r of moving) {
+      const at = runPath(b, `r${r.id}`, r.from, r.to as 1 | 2 | 3, release, BASE_MS * 2.2);
+      if (r === lead) arrive = at;
+    }
+    const target = basePoint(lead.to as 1 | 2 | 3);
     const catcher = fielderSpot(2);
     const cover = e.fielders?.[1] ?? 6;
     b.move(`f${cover}`, coverPoint(cover), arrive - 80, release);
     b.move('ball', { ...catcher, z: 4, o: 1 }, contact + 60);
-    toss(b, catcher, basePoint(2), arrive - (r.out ? 160 : -60));
-    b.mark({ t: arrive, kind: 'badge', text: r.out ? 'Out' : 'Safe', at: basePoint(2), tone: r.out ? 'out' : 'safe' });
-    if (r.out) b.move(`r${r.id}`, { ...basePoint(2), o: 0 }, arrive + 500, arrive + 250);
+    toss(b, catcher, target, arrive - (lead.out ? 160 : -60));
+    b.mark({ t: arrive, kind: 'badge', text: lead.out ? 'Out' : 'Safe', at: target, tone: lead.out ? 'out' : 'safe' });
+    if (lead.out) b.move(`r${lead.id}`, { ...target, o: 0 }, arrive + 500, arrive + 250);
     b.mark({ t: arrive, kind: 'reveal' });
     return b.build(400);
   }

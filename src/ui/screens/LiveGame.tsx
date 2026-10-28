@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  avg, defenseAt, era, isPitcher, ops, rate3, whip, type FieldPosition, type LiveCommand, type LiveSituation, type PlayEvent, type Player, type PlayerSeasonStats, type Team,
+  avg, defenseAt, era, stealTarget, isPitcher, ops, rate3, whip, type FieldPosition, type LiveCommand, type LiveSituation, type PlayEvent, type Player, type PlayerSeasonStats, type Team,
 } from '../../engine';
 import { AnimatedField } from '../field/AnimatedField';
 import type { Speed } from '../field/director';
@@ -120,7 +120,10 @@ function Live({
   const batter = players.get(s.batterId)!;
   const pitcher = players.get(s.pitcherId)!;
   const [on1, on2, on3] = s.bases;
-  const canSteal = s.userBatting && on1 !== null && on2 === null && s.outs < 2;
+  // The lead runner with an open base ahead of him can go (with a runner on first and second, both run).
+  const stealTo = stealTarget(s.bases);
+  const canSteal = s.userBatting && stealTo !== null;
+  const stealLabel = stealTo === 3 ? (on1 !== null ? 'Double steal' : 'Steal 3rd') : stealTo === 2 ? 'Steal 2nd' : 'Steal';
   const canBunt = s.userBatting && (on1 !== null || on2 !== null) && on3 === null && s.outs < 2;
   const plays = s.log.filter((l) => !/^(Top|Bottom) /.test(l)).slice(-5).reverse();
   const names = new Map([...players.values()].filter((p) => p.teamId === awayId || p.teamId === homeId).map((p) => [p.id, p.lastName]));
@@ -181,7 +184,7 @@ function Live({
           <div className="grid grid-cols-3 gap-2 [&>button]:h-9 [&>button]:text-xs">
             {s.userBatting ? (
               <>
-                <button className={btn} disabled={busy || !canSteal} onClick={() => command({ type: 'steal' })}>Steal</button>
+                <button className={btn} disabled={busy || !canSteal} onClick={() => command({ type: 'steal' })}>{stealLabel}</button>
                 <button className={btn} disabled={busy || !canBunt} onClick={() => command({ type: 'bunt' })}>Bunt</button>
                 <button className={btn} disabled={busy || s.bench.length === 0} onClick={() => setSheet('pinch')}>Pinch hit</button>
               </>
