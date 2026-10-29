@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { NavLink, Navigate, Outlet, useSearchParams } from 'react-router-dom';
+import { NavLink, Navigate, Outlet, useLocation, useSearchParams } from 'react-router-dom';
 import { useGame, useUserTeam } from '../../state/game';
 import { Icon } from '../components/Icon';
 import { TeamBadge } from '../components/TeamBadge';
@@ -19,6 +19,8 @@ export function AppShell() {
 }
 
 function Shell() {
+  // Home can spread its cards across a wide screen; other screens keep a readable width.
+  const wide = useLocation().pathname === '/play/home';
   const [params, setParams] = useSearchParams();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(() => !guideSeen());
@@ -38,8 +40,8 @@ function Shell() {
     <div className="min-h-dvh md:grid md:grid-cols-[15rem_1fr]">
       <Sidebar onSettings={() => setSettingsOpen(true)} />
       <div className="flex min-w-0 flex-col">
-        <TopBar onSettings={() => setSettingsOpen(true)} />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 pt-4 md:px-8 md:pb-10 md:pt-6">
+        <TopBar onSettings={() => setSettingsOpen(true)} wide={wide} />
+        <main className={`mx-auto w-full ${wide ? '' : 'max-w-5xl'} flex-1 px-4 pb-28 pt-4 md:px-8 md:pb-10 md:pt-6`}>
           <Outlet />
         </main>
       </div>
@@ -60,13 +62,13 @@ function Shell() {
   );
 }
 
-function TopBar({ onSettings }: { onSettings: () => void }) {
+function TopBar({ onSettings, wide }: { onSettings: () => void; wide: boolean }) {
   const team = useUserTeam();
   const league = useGame((s) => s.save!.league);
   const seasonDone = useGame((s) => s.save!.schedule.every((g) => g.seriesId !== undefined || g.played));
   return (
     <header className="pt-safe sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 md:px-8">
+      <div className={`mx-auto flex h-14 ${wide ? '' : 'max-w-5xl'} items-center gap-3 px-4 md:px-8`}>
         <TeamBadge team={team} size="sm" />
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-sm font-semibold">

@@ -8,7 +8,7 @@ import { DivisionStandings } from '../components/Standings';
 import { TeamBadge } from '../components/TeamBadge';
 import { AssistantCard } from '../components/AssistantCard';
 import { FarmCard, HotColdCard, InjuriesCard, TeamLeaders } from '../components/HomeCards';
-import { DEFAULT_LAYOUT, HOME_CARDS, resolveLayout, type HomeCardId } from '../home/layout';
+import { DEFAULT_LAYOUT, GRID_CLASSES, HOME_CARDS, MAX_COLUMNS, resolveLayout, type HomeCardId } from '../home/layout';
 import { TrendsCard } from '../components/TrendsCard';
 import { GameRow } from '../components/GameRow';
 import { Inbox } from '../components/Inbox';
@@ -61,13 +61,14 @@ export function Home() {
     }
   };
 
-  const grid = layout.columns === 1 ? '' : layout.columns === 3 ? 'md:grid-cols-2 xl:grid-cols-3' : 'md:grid-cols-2';
-  const span = layout.columns === 1 ? '' : 'md:col-span-2';
+  const grid = GRID_CLASSES[layout.columns] ?? GRID_CLASSES[2];
+  const span = layout.columns === 1 ? '' : '@lg:col-span-2';
 
   return (
+    <div className="@container">
     <div className={`grid grid-cols-1 gap-4 ${grid}`}>
       <section
-        className={`relative overflow-hidden rounded-2xl p-5 text-white ${layout.columns === 1 ? '' : layout.columns === 3 ? 'md:col-span-2 xl:col-span-3' : 'md:col-span-2'}`}
+        className="relative col-span-full overflow-hidden rounded-2xl p-5 text-white"
         style={{ background: `linear-gradient(135deg, ${team.primaryColor}, ${team.primaryColor}cc 60%, ${team.secondaryColor})` }}
       >
         <div className="flex items-center gap-4">
@@ -94,7 +95,7 @@ export function Home() {
         </dl>
       </section>
 
-      {editing && <LayoutBar layout={layout} onChange={saveLayout} spanClass={span} />}
+      {editing && <LayoutBar layout={layout} onChange={saveLayout} />}
 
       {layout.cards.map((c, i) => {
         if (c.hidden && !editing) return null;
@@ -116,24 +117,27 @@ export function Home() {
         );
       })}
     </div>
+    </div>
   );
 }
 
 /** Columns and reset, shown while customizing. */
-function LayoutBar({ layout, onChange, spanClass }: { layout: HomeLayout; onChange: (l: HomeLayout) => void; spanClass: string }) {
+function LayoutBar({ layout, onChange }: { layout: HomeLayout; onChange: (l: HomeLayout) => void }) {
   return (
-    <section className={`rounded-2xl border border-dashed border-accent bg-accent/5 p-4 ${spanClass}`}>
+    <section className="col-span-full rounded-2xl border border-dashed border-accent bg-accent/5 p-4">
       <p className="font-semibold">Customize your home screen</p>
       <p className="text-sm text-muted">Move cards up or down, make them wide, or hide them. Changes save as you go.</p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <div className="hidden items-center gap-2 text-sm md:flex">
-          Columns
+          Up to
           <div className="flex rounded-lg bg-surface-2 p-0.5" role="group" aria-label="Columns">
-            {([1, 2, 3] as const).map((n) => (
+            {Array.from({ length: MAX_COLUMNS }, (_, i) => i + 1).map((n) => (
               <button key={n} onClick={() => onChange({ ...layout, columns: n })} aria-pressed={layout.columns === n}
                 className={`h-8 w-9 rounded-md text-sm font-semibold ${layout.columns === n ? 'bg-surface shadow-sm' : 'text-muted'}`}>{n}</button>
             ))}
           </div>
+          columns
+          <span className="text-xs text-muted">(fewer show when the window is narrow)</span>
         </div>
         <button onClick={() => onChange(DEFAULT_LAYOUT)} className="h-8 rounded-lg border border-line px-3 text-sm font-medium hover:bg-surface-2">Reset to default</button>
       </div>
