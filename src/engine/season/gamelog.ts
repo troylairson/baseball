@@ -71,6 +71,18 @@ export function recordUserGame(league: League, userTeamId: number, game: Schedul
   const theirs = home ? result.away : result.home;
   const vs = home ? game.awayId : game.homeId;
 
+  const { spOuts, spEr, bpOuts, bpEr } = appendLines(log, game, vs, mine);
+  const oppStarter = theirs.pitchers[0] ? players.get(theirs.pitchers[0].playerId) : undefined;
+  log.team.push({ g: game.id, d: game.date, vs, rf: mine.runs, ra: theirs.runs, spOuts, spEr, bpOuts, bpEr, oppHand: oppStarter?.throws ?? 'R', home: home ? 1 : 0 });
+}
+
+/** Append one game's batting and pitching lines for a team to a log; returns starter/bullpen splits. */
+export function appendLines(
+  log: { bat: Record<number, BatLog[]>; pit: Record<number, PitLog[]> },
+  game: { id: number; date: string },
+  vs: number,
+  mine: GameResult['home'],
+): { spOuts: number; spEr: number; bpOuts: number; bpEr: number } {
   for (const b of mine.batters) {
     if (b.line.pa === 0) continue;
     (log.bat[b.playerId] ??= []).push({
@@ -95,6 +107,5 @@ export function recordUserGame(league: League, userTeamId: number, game: Schedul
       bpEr += p.line.er;
     }
   });
-  const oppStarter = theirs.pitchers[0] ? players.get(theirs.pitchers[0].playerId) : undefined;
-  log.team.push({ g: game.id, d: game.date, vs, rf: mine.runs, ra: theirs.runs, spOuts, spEr, bpOuts, bpEr, oppHand: oppStarter?.throws ?? 'R', home: home ? 1 : 0 });
+  return { spOuts, spEr, bpOuts, bpEr };
 }

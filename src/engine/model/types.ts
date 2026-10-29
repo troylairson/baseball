@@ -95,6 +95,13 @@ export interface Player {
   tradeRequested?: boolean;
 }
 
+export interface HomeLayout {
+  /** Columns on wide screens (phones always show one). */
+  columns: 1 | 2 | 3;
+  /** Cards in order; hidden ones keep their place for when they come back. */
+  cards: { id: string; hidden: boolean; wide: boolean }[];
+}
+
 export interface Injury {
   /** Days until healthy. */
   days: number;
@@ -310,6 +317,10 @@ export interface League {
   pickOwners?: Record<string, number>;
   /** Game-by-game logs for the user's team this season (for trends). */
   userLog?: import('../season/gamelog').UserGameLog;
+  /** How the manager arranged the home screen. */
+  homeLayout?: HomeLayout;
+  /** The user's Triple-A club's games this season. */
+  farm?: import('../season/farm').FarmLog;
   /** Single-season records by category key. */
   records?: Record<string, import('../season/legacy').RecordEntry>;
   hallOfFame?: import('../season/legacy').HallOfFamer[];

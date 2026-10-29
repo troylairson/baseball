@@ -3,7 +3,7 @@ import {
   acceptOffer, applyTrendAction, makeOffer, withdrawOffer, resolveRound, MARKET_ROUNDS, exportRoster, leagueFromRoster, mlbPackToRoster, parseRosterFile, type MlbPack, type TrendAction, assistantHandleStage, refusesToResign, autoDraftPick, liveGame, prepareLiveGame, declineOffer, executeTrade, extendPlayer, hireStaff, letPlayerGo, ROLE_LABEL, overall, playoffsOver, resignPlayer, runDraft, seasonOver, signFreeAgent, simDay, ACTIVE_ROSTER_SIZE,
   type GeneratedLeague, type LeagueSettings, type PlayedGame, type PlayerSeasonStats, type SavedPlan, type ScheduledGame,
   type SeasonState, type TeamStrategy, type TradeProposal, type AdviceAction, type GameResult, type LiveCommand, type LiveSituation, type PlayEvent,
-  findDecision, standingOrder, withDefaults, type Decision, type GamePlan, type LiveControl, type LiveOrders, type PitchingOrders,
+  findDecision, standingOrder, withDefaults, type Decision, type GamePlan, type LiveControl, type LiveOrders, type PitchingOrders, type HomeLayout,
 } from '../engine';
 import { GameDB, type BoxScore } from '../db/db';
 import {
@@ -312,6 +312,12 @@ export function createEngineApi(db = new GameDB()) {
         skipped++;
       }
       return liveState({ skipped });
+    },
+
+    /** Save how the home screen is arranged. */
+    async setHomeLayout(layout: HomeLayout): Promise<ActionResult> {
+      current().state.league.homeLayout = layout;
+      return commit();
     },
 
     /** Change standing orders (also for a game in progress). */

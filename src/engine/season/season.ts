@@ -11,6 +11,7 @@ import { staffRating } from './staff';
 import { updateMorale } from './morale';
 import { recordHomeGate, updateFans } from './finance';
 import { recordUserGame } from './gamelog';
+import { playFarmGame } from './farm';
 import { maybeMakeOffer } from './trades';
 import { maybeAiTrade } from './aiTrades';
 import {
@@ -339,6 +340,8 @@ export function simDay(state: SeasonState, preplayed?: Map<number, GameResult>):
     recordUserGame(league, state.userTeamId, game, result, players);
     played.push(pg);
   }
+  // The farm club plays when the big club does.
+  if (today.some((g) => g.homeId === state.userTeamId || g.awayId === state.userTeamId)) playFarmGame(state);
 
   const next = state.schedule.find((g) => !g.played);
   const nextDate = next ? (next.date > league.date ? next.date : addDays(league.date, 1)) : addDays(league.date, 1);

@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { useGame } from '../../state/game';
 import { engine } from '../../worker/client';
 import { PlayerActions } from './PlayerActions';
+import { batLine, batText, pitLine, pitText } from '../home/form';
 import { ArsenalCard } from '../components/Arsenal';
 import { MoraleSummary } from '../components/Morale';
 import { RecentForm } from '../components/RecentForm';
@@ -78,6 +79,7 @@ function PlayerDetail({ player, userTeamId }: { player: Player; userTeamId: numb
       </div>
 
       <SeasonStats player={player} stats={save.stats.find((s) => s.playerId === player.id)} season={save.league.season} />
+      <FarmLine player={player} />
       {player.teamId === userTeamId && <RecentForm player={player} />}
       <CareerStats player={player} />
 
@@ -181,6 +183,20 @@ function SeasonNotes({ player, stats }: { player: Player; stats: PlayerSeasonSta
       })}
       {post && <li><span className="font-medium text-ink">Postseason:</span> {brief(post.bat, post.pit)}</li>}
     </ul>
+  );
+}
+
+/** The player's Triple-A season, from the farm club's real games. */
+function FarmLine({ player }: { player: Player }) {
+  const league = useGame((s) => s.save!.league);
+  const farm = league.farm?.season === league.season ? league.farm : undefined;
+  const games = isPitcher(player) ? farm?.pit[player.id] : farm?.bat[player.id];
+  if (!games?.length) return null;
+  const text = isPitcher(player) ? pitText(pitLine(farm!.pit[player.id]!)) : batText(batLine(farm!.bat[player.id]!));
+  return (
+    <p className="mt-3 rounded-xl border border-line px-3 py-2 text-sm">
+      <span className="font-medium">Triple-A {league.season}:</span> <span className="text-muted">{text} in {games.length} game{games.length === 1 ? '' : 's'}</span>
+    </p>
   );
 }
 

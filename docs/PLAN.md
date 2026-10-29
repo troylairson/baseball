@@ -341,6 +341,9 @@ Repertoires with per-pitch grades, velocity and usage (`engine/model/pitches.ts`
 ### Home and roster shortcuts (done)
 Top hitters and pitching leaders on Home (by WAR, by rating before the season), a Triple-A card with one-tap call-ups that offer the matching send-down when the roster is full, a Contract decisions screen for everyone who can leave (asks, willingness, the assistant's price read, one-tap extend; re-sign/let go in the offseason), and Play opens the Manage Game screen.
 
+### Home customization and the farm club (done)
+Card-based home screen with a layout editor (show/hide, reorder, wide, 1–3 columns, reset), Injured list and Hot & cold cards, and real Triple-A games for the user's organization (`engine/season/farm.ts`, Triple-A norms, organizational filler for thin rosters, lines only for real players). Not yet: Triple-A games for other organizations, minor league injuries, drag-and-drop reordering.
+
 ### Other backlog items
 - Competitive balance after the free agency budget change: across 3 leagues x 5 seasons the best record averages ~108–110 wins (was ~107) and a 120+ win team shows up now and then (MLB record: 116). Likely cause: the luxury-tax line at 1.6x average payroll lets rich clubs keep stacking talent. Idea: taper spending above the line instead of a hard stop, then re-measure best record, win spread and winter signing rates.
 - 40-man roster, options and waivers; an AA level

@@ -40,3 +40,4 @@ export * from './season/value';
 export * from './season/aiTrades';
 export * from './model/pitches';
 export * from './sim/decisions';
+export * from './season/farm';
