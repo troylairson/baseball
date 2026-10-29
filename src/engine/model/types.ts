@@ -99,7 +99,7 @@ export interface HomeLayout {
   /** Most columns to show on wide screens, 1–6 (phones always show one). */
   columns: number;
   /** Cards in order; hidden ones keep their place for when they come back. */
-  cards: { id: string; hidden: boolean; wide: boolean }[];
+  cards: { id: string; hidden: boolean; wide: boolean; /** Shares a column with the card before it, underneath it. */ stacked?: boolean }[];
 }
 
 export interface Injury {

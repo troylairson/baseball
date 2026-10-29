@@ -97,22 +97,22 @@ export function Home() {
 
       {editing && <LayoutBar layout={layout} onChange={saveLayout} />}
 
-      {layout.cards.map((c, i) => {
-        if (c.hidden && !editing) return null;
-        const meta = HOME_CARDS.find((m) => m.id === c.id)!;
-        const card = render(c.id as HomeCardId);
+      {groups(layout, editing).map((group) => {
+        const head = layout.cards[group[0]!]!;
         return (
-          // Empty when a card has nothing to show (e.g. Triple-A in the offseason).
-          <div key={c.id} className={`${c.wide ? span : ''} ${editing ? '' : 'empty:hidden'} min-w-0`}>
-            {editing && (
-              <CardTools
-                label={meta.label}
-                layout={layout}
-                index={i}
-                onChange={saveLayout}
-              />
-            )}
-            {editing && c.hidden ? null : card}
+          // A group is one grid cell; stacked cards sit under the first. Hidden when none of its cards has anything to show.
+          <div key={head.id} className={`${head.wide ? span : ''} flex min-w-0 flex-col gap-4 ${editing ? '' : '[&:not(:has(>div:not(:empty)))]:hidden'}`}>
+            {group.map((i) => {
+              const c = layout.cards[i]!;
+              const meta = HOME_CARDS.find((m) => m.id === c.id)!;
+              return (
+                // Empty when a card has nothing to show (e.g. Triple-A in the offseason).
+                <div key={c.id} className={`${editing ? '' : 'empty:hidden'} min-w-0`}>
+                  {editing && <CardTools label={meta.label} layout={layout} index={i} onChange={saveLayout} />}
+                  {editing && c.hidden ? null : render(c.id as HomeCardId)}
+                </div>
+              );
+            })}
           </div>
         );
       })}
@@ -121,12 +121,27 @@ export function Home() {
   );
 }
 
+/**
+ * Cards grouped into grid cells: each card starts a cell unless it's stacked
+ * under the one before. Hidden cards drop out (except while customizing).
+ */
+function groups(layout: HomeLayout, editing: boolean): number[][] {
+  const out: number[][] = [];
+  layout.cards.forEach((c, i) => {
+    if (c.hidden && !editing) return;
+    const last = out[out.length - 1];
+    if (c.stacked && last) last.push(i);
+    else out.push([i]);
+  });
+  return out;
+}
+
 /** Columns and reset, shown while customizing. */
 function LayoutBar({ layout, onChange }: { layout: HomeLayout; onChange: (l: HomeLayout) => void }) {
   return (
     <section className="col-span-full rounded-2xl border border-dashed border-accent bg-accent/5 p-4">
       <p className="font-semibold">Customize your home screen</p>
-      <p className="text-sm text-muted">Move cards up or down, make them wide, or hide them. Changes save as you go.</p>
+      <p className="text-sm text-muted">Move cards up or down, hide them, make them wide, or stack a card under the one before it so they share a column. Changes save as you go.</p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <div className="hidden items-center gap-2 text-sm md:flex">
           Up to
@@ -159,10 +174,12 @@ function CardTools({ label, layout, index, onChange }: { label: string; layout: 
   const tool = 'h-8 min-w-8 rounded-lg border border-line bg-surface px-2 text-xs font-semibold hover:bg-surface-2 disabled:opacity-30';
   return (
     <div className={`mb-1.5 flex items-center gap-1.5 rounded-xl px-2 py-1.5 ${card.hidden ? 'border border-dashed border-line' : 'bg-surface-2'}`}>
-      <span className={`min-w-0 flex-1 truncate text-sm font-medium ${card.hidden ? 'text-muted' : ''}`}>{label}</span>
+      <span className={`min-w-0 flex-1 truncate text-sm font-medium ${card.hidden ? 'text-muted' : ''}`}>{card.stacked ? '↳ ' : ''}{label}</span>
       <button className={tool} onClick={() => move(-1)} disabled={index === 0} aria-label={`Move ${label} up`}>↑</button>
       <button className={tool} onClick={() => move(1)} disabled={index === layout.cards.length - 1} aria-label={`Move ${label} down`}>↓</button>
-      <button className={`${tool} hidden md:inline`} onClick={() => set({ wide: !card.wide })} aria-pressed={card.wide}>{card.wide ? 'Wide' : 'Normal'}</button>
+      <button className={`${tool} hidden md:inline`} onClick={() => set({ stacked: !card.stacked })} disabled={index === 0} aria-pressed={!!card.stacked}
+        title="Put this card under the one before it, in the same column">{card.stacked ? 'Unstack' : 'Stack'}</button>
+      {!card.stacked && <button className={`${tool} hidden md:inline`} onClick={() => set({ wide: !card.wide })} aria-pressed={card.wide}>{card.wide ? 'Wide' : 'Normal'}</button>}
       <button className={tool} onClick={() => set({ hidden: !card.hidden })}>{card.hidden ? 'Show' : 'Hide'}</button>
     </div>
   );
