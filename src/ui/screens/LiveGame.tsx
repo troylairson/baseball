@@ -13,6 +13,7 @@ import { BottomSheet } from '../components/BottomSheet';
 import { Icon } from '../components/Icon';
 import { RatingBadge } from '../components/Rating';
 import { MatchupPanel } from '../components/Matchup';
+import { PLAY_LIVE_EVENT } from '../layout/SimControls';
 import { DecisionCard, OrdersSheet } from '../components/LiveAssist';
 import { TeamBadge } from '../components/TeamBadge';
 import { fullName, shortName } from '../format';
@@ -70,13 +71,20 @@ export function LiveGame() {
     setShown(state);
   }, [state]);
 
+  // Start (or resume) on arrival, and again when Play is pressed here after a game ends.
+  const [round, setRound] = useState(0);
   useEffect(() => {
     let live = true;
     engine().liveStart().then((s) => live && apply(s, false));
     return () => {
       live = false;
     };
-  }, [apply]);
+  }, [apply, round]);
+  useEffect(() => {
+    const again = () => setRound((r) => r + 1);
+    window.addEventListener(PLAY_LIVE_EVENT, again);
+    return () => window.removeEventListener(PLAY_LIVE_EVENT, again);
+  }, []);
 
   const run = async (fn: () => Promise<LiveState>, animate = true) => {
     setBusy(true);
@@ -110,7 +118,7 @@ export function LiveGame() {
       </div>
     );
   }
-  if (view.status !== 'live') return state.status === 'final' ? <Final gameId={state.gameId} /> : null;
+  if (view.status !== 'live') return state.status === 'final' ? <Final gameId={state.gameId} onNext={() => setRound((r) => r + 1)} /> : null;
   return (
     <Live
       s={view.situation}
@@ -430,7 +438,7 @@ function PickSheet({
   );
 }
 
-function Final({ gameId }: { gameId: number }) {
+function Final({ gameId, onNext }: { gameId: number; onNext: () => void }) {
   const save = useSave();
   const team = useUserTeam();
   const openGame = useOpenGame();
@@ -452,8 +460,11 @@ function Final({ gameId }: { gameId: number }) {
       </div>
       <p className={`text-xl font-bold ${mine > theirs ? 'text-accent' : 'text-danger'}`}>{mine > theirs ? 'You win!' : 'Tough loss.'}</p>
       <div className="mt-6 grid gap-2">
+        <button onClick={onNext} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-accent font-semibold text-accent-contrast">
+          <Icon name="play" className="size-4" /> Manage next game
+        </button>
         <button onClick={() => openGame(gameId)} className="h-12 rounded-xl border border-line font-semibold hover:bg-surface-2">Box score</button>
-        <Link to="/play/home" className="flex h-12 items-center justify-center rounded-xl bg-accent font-semibold text-accent-contrast">Back to Home</Link>
+        <Link to="/play/home" className="flex h-12 items-center justify-center rounded-xl border border-line font-semibold hover:bg-surface-2">Back to Home</Link>
       </div>
     </div>
   );

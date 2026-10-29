@@ -502,6 +502,25 @@ export function createEngineApi(db = new GameDB()) {
       return commit();
     },
 
+    /** Call one player up and send another down in a single move (for a full active roster). */
+    async swapLevels(callUpId: number, sendDownId: number): Promise<ActionResult> {
+      const { state } = current();
+      const up = state.players.find((x) => x.id === callUpId);
+      const down = state.players.find((x) => x.id === sendDownId);
+      if (!up || !down || up.teamId !== state.userTeamId || down.teamId !== state.userTeamId) return { ok: false, reason: 'Those players are not in your organization.' };
+      if (up.level !== 'AAA' || down.level !== 'MLB') return { ok: false, reason: 'Call up a AAA player and send down a big leaguer.' };
+      down.level = 'AAA';
+      up.level = 'MLB';
+      addNews(state.league, {
+        kind: 'transaction',
+        title: `Called up ${up.firstName} ${up.lastName}`,
+        body: `${down.firstName} ${down.lastName} was optioned to AAA to make room.`,
+        playerId: callUpId,
+        mine: true,
+      });
+      return commit();
+    },
+
     // --- Offseason actions ---------------------------------------------------
 
     async resign(playerId: number): Promise<ActionResult> {

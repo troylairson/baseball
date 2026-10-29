@@ -94,4 +94,22 @@ describe('engine api', () => {
     expect(reloaded?.league.liveOrders?.starterPitchLimit).toBe(80);
     expect(stops).toBeGreaterThanOrEqual(0);
   });
+
+  it('swaps a call-up for a send-down in one move', async () => {
+    const api = createEngineApi(new GameDB('api-swap-test'));
+    await api.previewLeague(SMALL, 11);
+    const id = await api.startCareer(0);
+    const save = (await api.loadSave(id))!;
+    const up = save.players.find((p) => p.teamId === 0 && p.level === 'AAA')!;
+    const down = save.players.find((p) => p.teamId === 0 && p.level === 'MLB' && !p.pitching)!;
+    const res = await api.swapLevels(up.id, down.id);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.save.players.find((p) => p.id === up.id)!.level).toBe('MLB');
+      expect(res.save.players.find((p) => p.id === down.id)!.level).toBe('AAA');
+    }
+    // Backwards (a big leaguer "up", a minor leaguer "down") is refused.
+    expect((await api.swapLevels(down.id, up.id)).ok).toBe(true);
+    expect((await api.swapLevels(down.id, up.id)).ok).toBe(false);
+  });
 });

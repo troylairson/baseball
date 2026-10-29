@@ -1,18 +1,17 @@
 import { Link } from 'react-router-dom';
-import { autoPlan, headedToFreeAgency, overall, pickStarter, type Player } from '../../engine';
+import { autoPlan, headedToFreeAgency, overall, pickStarter } from '../../engine';
 import { useSave, useUserTeam } from '../../state/game';
 import { Card } from '../components/Card';
 import { Icon, type IconName } from '../components/Icon';
-import { RatingBadge } from '../components/Rating';
 import { DivisionStandings } from '../components/Standings';
 import { TeamBadge } from '../components/TeamBadge';
 import { AssistantCard } from '../components/AssistantCard';
+import { FarmCard, TeamLeaders } from '../components/HomeCards';
 import { TrendsCard } from '../components/TrendsCard';
 import { GameRow } from '../components/GameRow';
 import { Inbox } from '../components/Inbox';
 import { fullName, money, shortName } from '../format';
 import { useOpenGame, useOpenPlayer } from '../hooks';
-import { scoutedOverall } from '../scouting';
 import { payrollBudget, spending, teamOverall } from '../teams';
 
 export function Home() {
@@ -78,7 +77,7 @@ export function Home() {
             />
           )}
           {expiring.length > 0 && (
-            <Todo icon="pen" to="/play/office" title={`${expiring.length} player${expiring.length === 1 ? '' : 's'} can leave as free agents after this season`} detail="Decide who to extend before free agency." />
+            <Todo icon="pen" to="/play/contracts" title={`${expiring.length} player${expiring.length === 1 ? '' : 's'} can leave as free agents after this season`} detail="Decide who to extend before free agency." />
           )}
           {pay > budget && (
             <Todo icon="alert" to="/play/office" title="Spending is over budget" detail={`${money(pay - budget)} over the owner's ${money(budget)} limit.`} />
@@ -100,19 +99,9 @@ export function Home() {
         <DivisionStandings division={division} teams={teams} userTeamId={team.id} />
       </Card>
 
-      <Card title="Best players" className="md:col-span-2">
-        <ul className="-mx-2">
-          {org.filter((p) => p.level === 'MLB').sort((a, b) => overall(b) - overall(a)).slice(0, 3).map((p: Player) => (
-            <li key={p.id}>
-              <button onClick={() => openPlayer(p.id)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-surface-2">
-                <span className="w-8 text-center text-xs font-bold text-muted">{p.position}</span>
-                <span className="flex-1 font-medium">{fullName(p)}</span>
-                <RatingBadge value={scoutedOverall(p, team.id).ovr} size="sm" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <TeamLeaders side="bat" />
+      <TeamLeaders side="pit" />
+      <FarmCard />
     </div>
   );
 }

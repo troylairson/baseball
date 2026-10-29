@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, useGame } from '../../state/game';
 import type { SimMode } from '../../worker/api';
 import { BottomSheet } from '../components/BottomSheet';
@@ -7,17 +7,20 @@ import { Icon } from '../components/Icon';
 import { formatDate } from '../format';
 
 const SEASON_OPTIONS: { mode: SimMode; label: string; detail: string }[] = [
-  { mode: 'next', label: 'Next game', detail: 'Play through your next game' },
+  { mode: 'next', label: 'Sim next game', detail: 'Let your staff play the next game' },
   { mode: 'week', label: 'One week', detail: 'Sim the next 7 days' },
   { mode: 'month', label: 'One month', detail: 'Sim the next 30 days' },
   { mode: 'season', label: 'Rest of season', detail: 'Sim to the end of the regular season' },
 ];
 const PLAYOFF_OPTIONS: typeof SEASON_OPTIONS = [
-  { mode: 'next', label: 'Next game', detail: 'Play the next playoff game' },
+  { mode: 'next', label: 'Sim next game', detail: 'Let your staff play the next playoff game' },
   { mode: 'playoffs', label: 'Rest of playoffs', detail: 'Sim until a champion is crowned' },
 ];
 
 type Primary = { label: string; run: () => void; menu: boolean; disabled?: boolean };
+
+/** Asks an open Manage Game screen to start the next game. */
+export const PLAY_LIVE_EVENT = 'dgm:play-live';
 
 /** Split button whose primary action follows the season: play, playoffs, offseason. */
 export function SimButton() {
@@ -26,7 +29,10 @@ export function SimButton() {
   const act = useGame((s) => s.act);
   const running = useGame((s) => s.sim !== null);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [menu, setMenu] = useState(false);
+  // Play means managing the game yourself; quick sims live in the menu.
+  const playLive = () => (pathname === '/play/live' ? window.dispatchEvent(new Event(PLAY_LIVE_EVENT)) : navigate('/play/live'));
   const { league, schedule } = save;
   const regularDone = schedule.every((g) => g.seriesId !== undefined || g.played);
 
@@ -40,11 +46,11 @@ export function SimButton() {
       menu: false,
     };
   } else if (league.phase === 'playoffs') {
-    primary = { label: 'Play', run: () => void simulate('next'), menu: true };
+    primary = { label: 'Play', run: playLive, menu: true };
   } else if (regularDone) {
     primary = { label: 'Playoffs', run: () => void simulate('next'), menu: false };
   } else {
-    primary = { label: league.phase === 'preseason' ? 'Play ball' : 'Play', run: () => void simulate('next'), menu: true };
+    primary = { label: league.phase === 'preseason' ? 'Play ball' : 'Play', run: playLive, menu: true };
   }
   const options = league.phase === 'playoffs' ? PLAYOFF_OPTIONS : SEASON_OPTIONS;
 
@@ -67,20 +73,7 @@ export function SimButton() {
       </div>
       <BottomSheet open={menu} onClose={() => setMenu(false)} title="Simulate">
         <h2 className="mb-1 text-xl font-bold">Simulate</h2>
-        <p className="mb-4 text-sm text-muted">Today is {formatDate(league.date)}.</p>
-        <button
-          onClick={() => {
-            setMenu(false);
-            navigate('/play/live');
-          }}
-          className="mb-2 flex w-full items-center gap-3 rounded-2xl bg-accent px-4 py-3 text-left text-accent-contrast"
-        >
-          <span className="flex-1">
-            <span className="block font-semibold">Manage next game live</span>
-            <span className="block text-sm opacity-80">Make the calls pitch by pitch</span>
-          </span>
-          <Icon name="games" className="size-5" />
-        </button>
+        <p className="mb-4 text-sm text-muted">Today is {formatDate(league.date)}. Play opens the next game for you to manage; these let your staff handle it.</p>
         <ul className="flex flex-col gap-2">
           {options.map((o) => (
             <li key={o.mode}>

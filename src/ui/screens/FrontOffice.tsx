@@ -76,7 +76,7 @@ export function FrontOffice() {
           </ul>
         </Card>
 
-        <Card title="Contracts" className="md:col-span-2">
+        <Card title="Contracts" className="md:col-span-2" action={<Link to="/play/contracts" className="text-sm font-medium text-accent">Contract decisions</Link>}>
           <div className="-mx-4 overflow-x-auto">
             <table className="w-full min-w-[28rem] text-sm tabular-nums">
               <thead>

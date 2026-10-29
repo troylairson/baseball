@@ -13,7 +13,7 @@ const STEPS: { icon: IconName; title: string; body: string }[] = [
   {
     icon: 'play',
     title: 'Play ball',
-    body: 'The green button plays your next game. Its arrow sims a week, a month or the season — or lets you manage a game live, making the calls yourself.',
+    body: 'The green button starts your next game for you to manage: "Next decision" plays on until there is a call to make. Its arrow lets your staff sim the next game, a week, a month or the season instead.',
   },
   {
     icon: 'roster',

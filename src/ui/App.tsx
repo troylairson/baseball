@@ -4,6 +4,7 @@ import { lastSaveId, useGame } from '../state/game';
 import { AppShell } from './layout/AppShell';
 import { FreeAgents } from './screens/FreeAgents';
 import { FrontOffice } from './screens/FrontOffice';
+import { Contracts } from './screens/Contracts';
 import { Games } from './screens/Games';
 import { Home } from './screens/Home';
 import { League } from './screens/League';
@@ -54,6 +55,7 @@ export function App() {
           <Route path="roster" element={<Roster />} />
           <Route path="games" element={<Games />} />
           <Route path="office" element={<FrontOffice />} />
+          <Route path="contracts" element={<Contracts />} />
           <Route path="league" element={<League />} />
           <Route path="offseason" element={<Offseason />} />
           <Route path="free-agents" element={<FreeAgents />} />

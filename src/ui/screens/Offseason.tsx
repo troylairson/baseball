@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { contractDemand, freeAgents, MARKET_ROUNDS, refusesToResign, type OffseasonStage, type Player } from '../../engine';
 import { MarketPanel, OfferSheet } from './Market';
 import { api, useGame, useSave, useUserTeam } from '../../state/game';
@@ -181,6 +181,11 @@ function Resign() {
   return (
     <div className="grid grid-cols-1 gap-4">
       <Card><BudgetBar used={committed} budget={payrollBudget(team)} label="Next season's commitments" /></Card>
+      {expiring.length > 0 && (
+        <Link to="/play/contracts" className="flex h-11 items-center justify-center rounded-xl border border-line text-sm font-semibold text-accent hover:bg-surface-2">
+          Compare asks, prices and who'll stay
+        </Link>
+      )}
       <Card title={`Expiring contracts (${expiring.length})`} className="px-2 sm:px-4">
         {expiring.length === 0 ? (
           <p className="px-2 text-sm text-muted">Nobody to decide on. Young players under team control were renewed automatically.</p>
