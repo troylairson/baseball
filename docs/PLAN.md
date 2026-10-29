@@ -339,6 +339,10 @@ More collected stats (holds, blown saves, quality starts, complete games, shutou
 Repertoires with per-pitch grades, velocity and usage (`engine/model/pitches.ts`); effects on ground-ball rate, platoon splits, batter-pitch matchups and a times-through-the-order penalty softened by arsenal depth, all centred so league totals hold. Arsenal card on the player sheet, pitch type and speed in the live game. Not yet: pitch-level stats (whiff rates, usage by count), real MLB repertoires in the data pack.
 
 ### Other backlog items
+- Home screen: "Top hitters" and "Pitching leaders" sections showing your team's best performers right now.
+- An easier screen to manage and re-sign upcoming free agents (players in their last year before free agency).
+- Make the top-bar "Play" button start the Manage Game (live game) screen by default.
+- More visibility for your minor league team on the home screen, with easier call-ups and send-downs.
 - Competitive balance after the free agency budget change: across 3 leagues x 5 seasons the best record averages ~108–110 wins (was ~107) and a 120+ win team shows up now and then (MLB record: 116). Likely cause: the luxury-tax line at 1.6x average payroll lets rich clubs keep stacking talent. Idea: taper spending above the line instead of a hard stop, then re-measure best record, win spread and winter signing rates.
 - 40-man roster, options and waivers; an AA level
 - International amateur signings; draft bonus pools
